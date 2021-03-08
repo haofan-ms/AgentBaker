@@ -495,24 +495,8 @@ done
 # v1.20.2
 # NOTE that we only keep the latest one per k8s patch version as kubelet/kubectl is decided by VHD version
 K8S_VERSIONS="
-1.17.3-hotfix.20200601.1
-1.17.7-hotfix.20200817.1
-1.17.9-hotfix.20200824.1
-1.17.11-hotfix.20200901.1
-1.17.13
-1.17.16
-1.18.2-hotfix.20200624.1
-1.18.4-hotfix.20200626.1
-1.18.6-hotfix.20200723.1
-1.18.8-hotfix.20200924
-1.18.10-hotfix.20210118
-1.18.14-hotfix.20210118
-1.19.0
-1.19.1-hotfix.20200923
-1.19.3
-1.19.6-hotfix.20210118
-1.19.7-hotfix.20210122
-1.20.2
+1.18.10
+1.18.15
 "
 for PATCHED_KUBERNETES_VERSION in ${K8S_VERSIONS}; do
   # Only need to store k8s components >= 1.19 for containerd VHDs
@@ -520,7 +504,7 @@ for PATCHED_KUBERNETES_VERSION in ${K8S_VERSIONS}; do
     continue
   fi
   if (($(echo ${PATCHED_KUBERNETES_VERSION} | cut -d"." -f2) < 17)); then
-    HYPERKUBE_URL="mcr.microsoft.com/oss/kubernetes/hyperkube:v${PATCHED_KUBERNETES_VERSION}"
+    HYPERKUBE_URL="mcr.microsoft.com/oss/kubernetes/hyperkube:v${PATCHED_KUBERNETES_VERSION}-azs"
     # NOTE: the KUBERNETES_VERSION will be used to tag the extracted kubelet/kubectl in /usr/local/bin
     # it should match the KUBERNETES_VERSION format(just version number, e.g. 1.15.7, no prefix v)
     # in installKubeletAndKubectl() executed by cse, otherwise cse will need to download the kubelet/kubectl again
@@ -539,7 +523,7 @@ for PATCHED_KUBERNETES_VERSION in ${K8S_VERSIONS}; do
       PATCHED_KUBERNETES_VERSION=`echo ${PATCHED_KUBERNETES_VERSION} | cut -d"." -f1,2,3`;
     fi
     KUBERNETES_VERSION=$(echo ${PATCHED_KUBERNETES_VERSION} | cut -d"_" -f1 | cut -d"-" -f1 | cut -d"." -f1,2,3)
-    extractKubeBinaries $KUBERNETES_VERSION "https://acs-mirror.azureedge.net/kubernetes/v${PATCHED_KUBERNETES_VERSION}/binaries/kubernetes-node-linux-amd64.tar.gz"
+    extractKubeBinaries $KUBERNETES_VERSION "https://acs-mirror.azureedge.net/kubernetes/v${PATCHED_KUBERNETES_VERSION}-azs/binaries/kubernetes-node-linux-amd64.tar.gz"
   fi
 done
 ls -ltr /usr/local/bin/* >> ${VHD_LOGS_FILEPATH}
@@ -557,24 +541,8 @@ ls -ltr /usr/local/bin/* >> ${VHD_LOGS_FILEPATH}
 # v1.20.2
 # NOTE that we keep multiple files per k8s patch version as kubeproxy version is decided by CCP.
 PATCHED_HYPERKUBE_IMAGES="
-1.17.3-hotfix.20200601.1
-1.17.7-hotfix.20200714.2
-1.17.9-hotfix.20200824.1
-1.17.11-hotfix.20200901
-1.17.11-hotfix.20200901.1
-1.17.13
-1.17.16
-1.18.4-hotfix.20200626.1
-1.18.6-hotfix.20200723.1
-1.18.8-hotfix.20200924
-1.18.10-hotfix.20210118
-1.18.14-hotfix.20210118
-1.19.0
-1.19.1-hotfix.20200923
-1.19.3
-1.19.6-hotfix.20210118
-1.19.7-hotfix.20210122
-1.20.2
+1.18.10
+1.18.15
 "
 for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
   # Only need to store k8s components >= 1.19 for containerd VHDs
@@ -583,7 +551,7 @@ for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
   fi
   # TODO: after CCP chart is done, change below to get hyperkube only for versions less than 1.17 only
   if (($(echo ${KUBERNETES_VERSION} | cut -d"." -f2) < 19)); then
-      CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/hyperkube:v${KUBERNETES_VERSION}"
+      CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/hyperkube:v${KUBERNETES_VERSION}-azs"
       pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
       echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
       if [[ ${cliTool} == "docker" ]]; then
@@ -606,7 +574,7 @@ for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
       else
       KUBERNETES_VERSION=`echo ${KUBERNETES_VERSION} | cut -d"." -f1,2,3`;
       fi
-      CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/kube-proxy:v${KUBERNETES_VERSION}"
+      CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/kube-proxy:v${KUBERNETES_VERSION}-azs"
       pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
       if [[ ${cliTool} == "docker" ]]; then
           docker run --rm --entrypoint "" ${CONTAINER_IMAGE} /bin/sh -c "iptables --version" | grep -v nf_tables && echo "kube-proxy contains no nf_tables"
@@ -620,6 +588,17 @@ for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
       fi
       echo "  - ${CONTAINER_IMAGE}" >>${VHD_LOGS_FILEPATH}
   fi
+
+  for component in kube-apiserver kube-controller-manager kube-scheduler; do
+    if grep -iq hotfix <<< ${KUBERNETES_VERSION}; then
+    KUBERNETES_VERSION=`echo ${KUBERNETES_VERSION} | cut -d"." -f1,2,3,4`;
+    else
+    KUBERNETES_VERSION=`echo ${KUBERNETES_VERSION} | cut -d"." -f1,2,3`;
+    fi
+    CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/${component}:v${KUBERNETES_VERSION}-azs"
+    pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+    echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
+  done
 done
 
 ADDON_IMAGES="

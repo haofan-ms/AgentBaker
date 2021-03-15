@@ -117,8 +117,7 @@ echo $(date),$(hostname), "End configuring GPU drivers"
 docker login -u $SERVICE_PRINCIPAL_CLIENT_ID -p $SERVICE_PRINCIPAL_CLIENT_SECRET {{GetPrivateAzureRegistryServer}}
 {{end}}
 
-installKubeletKubectlAndKubeProxy
-installKubeletKubectlAndKubeadm
+installKubeletKubectlKubeadmAndKubeProxy
 
 if [[ $OS != $COREOS_OS_NAME ]]; then
     ensureRPC

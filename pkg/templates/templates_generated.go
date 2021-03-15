@@ -789,7 +789,8 @@ configureCNI() {
 
 configureCNIIPTables() {
     if [[ "${NETWORK_PLUGIN}" = "azure" ]]; then
-        mv $CNI_BIN_DIR/10-azure.conflist $CNI_CONFIG_DIR/
+        jq '.plugins[0].ipam.environment = "mas"' $CNI_BIN_DIR/10-azure.conflist > $CNI_CONFIG_DIR/10-azure.conflist
+        rm -f $CNI_BIN_DIR/10-azure.conflist
         chmod 600 $CNI_CONFIG_DIR/10-azure.conflist
         if [[ "${NETWORK_POLICY}" == "calico" ]]; then
           sed -i 's#"mode":"bridge"#"mode":"transparent"#g' $CNI_CONFIG_DIR/10-azure.conflist
@@ -815,6 +816,102 @@ disable1804SystemdResolved() {
     {{- else}}
     echo "Disable1804SystemdResolved is false. Skipping."
     {{- end}}
+}
+
+configureAzureStackInterfaces() {
+    NETWORK_INTERFACES_FILE="/etc/kubernetes/network_interfaces.json"
+    AZURE_CNI_CONFIG_FILE="/etc/kubernetes/interfaces.json"
+    AZURESTACK_ENVIRONMENT_JSON_PATH="/etc/kubernetes/AzureStackCloud.json"
+    NETWORK_API_VERSION="2018-08-01"
+
+    SERVICE_MANAGEMENT_ENDPOINT=$(jq -r '.serviceManagementEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH}) #
+    ACTIVE_DIRECTORY_ENDPOINT=$(jq -r '.activeDirectoryEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH}) #
+    RESOURCE_MANAGER_ENDPOINT=$(jq -r '.resourceManagerEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH}) #
+
+    # if [[ ${IDENTITY_SYSTEM,,} == "adfs" ]]; then #
+    TOKEN_URL="${ACTIVE_DIRECTORY_ENDPOINT}/oauth2/token"
+    # else
+    #     TOKEN_URL="${ACTIVE_DIRECTORY_ENDPOINT}${TENANT_ID}/oauth2/token"
+    # fi
+
+    echo "Generating token for Azure Resource Manager"
+    echo "------------------------------------------------------------------------"
+    echo "Parameters"
+    echo "------------------------------------------------------------------------"
+    echo "SERVICE_PRINCIPAL_CLIENT_ID:     ..."
+    echo "SERVICE_PRINCIPAL_CLIENT_SECRET: ..."
+    echo "SERVICE_MANAGEMENT_ENDPOINT:     ${SERVICE_MANAGEMENT_ENDPOINT}"
+    echo "ACTIVE_DIRECTORY_ENDPOINT:       ${ACTIVE_DIRECTORY_ENDPOINT}"
+    echo "TENANT_ID:                       ${TENANT_ID}"
+    echo "IDENTITY_SYSTEM:                 ${IDENTITY_SYSTEM}"
+    echo "TOKEN_URL:                       ${TOKEN_URL}"
+    echo "------------------------------------------------------------------------"
+
+    TOKEN=$(curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "grant_type=client_credentials" \
+        -d "client_id=${SERVICE_PRINCIPAL_CLIENT_ID}" \
+        --data-urlencode "client_secret=${SERVICE_PRINCIPAL_CLIENT_SECRET}" \
+        --data-urlencode "resource=${SERVICE_MANAGEMENT_ENDPOINT}" \
+        ${TOKEN_URL} | jq '.access_token' | xargs)
+
+    if [[ -z ${TOKEN} ]]; then
+        echo "Error generating token for Azure Resource Manager"
+        exit 120
+    fi
+
+    echo "Fetching network interface configuration for node"
+    echo "------------------------------------------------------------------------"
+    echo "Parameters"
+    echo "------------------------------------------------------------------------"
+    echo "RESOURCE_MANAGER_ENDPOINT: $RESOURCE_MANAGER_ENDPOINT"
+    echo "SUBSCRIPTION_ID:           $SUBSCRIPTION_ID"
+    echo "RESOURCE_GROUP:            $RESOURCE_GROUP"
+    echo "NETWORK_API_VERSION:       $NETWORK_API_VERSION"
+    echo "------------------------------------------------------------------------"
+
+    curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X GET \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Content-Type: application/json" \
+        "${RESOURCE_MANAGER_ENDPOINT}subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Network/networkInterfaces?api-version=${NETWORK_API_VERSION}" > ${NETWORK_INTERFACES_FILE}
+
+    if [[ ! -s ${NETWORK_INTERFACES_FILE} ]]; then
+        echo "Error fetching network interface configuration for node"
+        exit 121
+    fi
+
+    echo "Generating Azure CNI interface file"
+
+    mapfile -t local_interfaces < <(cat /sys/class/net/*/address | tr -d : | sed 's/.*/\U&/g')
+
+    SDN_INTERFACES=$(jq ".value | map(select(.properties != null) | select(.properties.macAddress != null) | select(.properties.macAddress | inside(\"${local_interfaces[*]}\"))) | map(select((.properties.ipConfigurations | length) > 0))" ${NETWORK_INTERFACES_FILE})
+
+    if [[ -z ${SDN_INTERFACES} ]]; then
+        echo "Error extracting the SDN interfaces from the network interfaces file"
+        exit 123
+    fi
+
+    AZURE_CNI_CONFIG=$(echo ${SDN_INTERFACES} | jq "{Interfaces: [.[] | {MacAddress: .properties.macAddress, IsPrimary: .properties.primary, IPSubnets: [{Prefix: .properties.ipConfigurations[0].properties.subnet.id, IPAddresses: .properties.ipConfigurations | [.[] | {Address: .properties.privateIPAddress, IsPrimary: .properties.primary}]}]}]}")
+
+    mapfile -t SUBNET_IDS < <(echo ${SDN_INTERFACES} | jq '[.[].properties.ipConfigurations[0].properties.subnet.id] | unique | .[]' -r)
+
+    for SUBNET_ID in "${SUBNET_IDS[@]}"; do
+        SUBNET_PREFIX=$(curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X GET \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${RESOURCE_MANAGER_ENDPOINT}${SUBNET_ID:1}?api-version=${NETWORK_API_VERSION}" |
+            jq '.properties.addressPrefix' -r)
+
+        if [[ -z ${SUBNET_PREFIX} ]]; then
+            echo "Error fetching the subnet address prefix for a subnet ID"
+            exit 122
+        fi
+
+        AZURE_CNI_CONFIG=$(echo ${AZURE_CNI_CONFIG} | sed "s|${SUBNET_ID}|${SUBNET_PREFIX}|g")
+    done
+
+    echo ${AZURE_CNI_CONFIG} > ${AZURE_CNI_CONFIG_FILE}
+    chmod 0444 ${AZURE_CNI_CONFIG_FILE}
 }
 
 {{- if NeedsContainerd}}
@@ -1268,7 +1365,7 @@ retrycmd_get_tarball() {
         if [ $i -eq $tar_retries ]; then
             return 1
         else
-            timeout 60 curl -fsSL $url -o $tarball
+            timeout 600 curl -fsSL $url -o $tarball
             sleep $wait_sleep
         fi
     done
@@ -1743,7 +1840,7 @@ extractKubeBinaries() {
     K8S_TGZ_TMP=${KUBE_BINARY_URL##*/}
     retrycmd_get_tarball 120 5 "$K8S_DOWNLOADS_DIR/${K8S_TGZ_TMP}" ${KUBE_BINARY_URL} || exit $ERR_K8S_DOWNLOAD_TIMEOUT
     tar --transform="s|.*|&-${K8S_VERSION}|" --show-transformed-names -xzvf "$K8S_DOWNLOADS_DIR/${K8S_TGZ_TMP}" \
-        --strip-components=3 -C /usr/local/bin kubernetes/node/bin/kubelet kubernetes/node/bin/kubectl
+        --strip-components=3 -C /usr/local/bin kubernetes/node/bin/kubelet kubernetes/node/bin/kubectl kubernetes/node/bin/kubeadm
     rm -f "$K8S_DOWNLOADS_DIR/${K8S_TGZ_TMP}"
 }
 
@@ -1774,7 +1871,7 @@ extractHyperkube() {
     mv "$path/hyperkube" "/usr/local/bin/kubectl-${KUBERNETES_VERSION}"    
 }
 
-installKubeletKubectlAndKubeProxy() {
+installKubeletKubectlKubeadmAndKubeProxy() {
     if [[ ! -f "/usr/local/bin/kubectl-${KUBERNETES_VERSION}" ]]; then
         #TODO: remove the condition check on KUBE_BINARY_URL once RP change is released
         if (($(echo ${KUBERNETES_VERSION} | cut -d"." -f2) >= 17)) && [ -n "${KUBE_BINARY_URL}" ]; then
@@ -1790,8 +1887,9 @@ installKubeletKubectlAndKubeProxy() {
 
     mv "/usr/local/bin/kubelet-${KUBERNETES_VERSION}" "/usr/local/bin/kubelet"
     mv "/usr/local/bin/kubectl-${KUBERNETES_VERSION}" "/usr/local/bin/kubectl"
-    chmod a+x /usr/local/bin/kubelet /usr/local/bin/kubectl
-    rm -rf /usr/local/bin/kubelet-* /usr/local/bin/kubectl-* /home/hyperkube-downloads &
+    mv "/usr/local/bin/kubeadm-${KUBERNETES_VERSION}" "/usr/local/bin/kubeadm"
+    chmod a+x /usr/local/bin/kubelet /usr/local/bin/kubectl /usr/local/bin/kubeadm
+    rm -rf /usr/local/bin/kubelet-* /usr/local/bin/kubectl-* /usr/local/bin/kubeadm-* /home/hyperkube-downloads &
 
     if [ -n "${KUBEPROXY_URL}" ]; then
         #kubeproxy is a system addon that is dictated by control plane so it shouldn't block node provisioning
@@ -2028,7 +2126,7 @@ echo $(date),$(hostname), "End configuring GPU drivers"
 docker login -u $SERVICE_PRINCIPAL_CLIENT_ID -p $SERVICE_PRINCIPAL_CLIENT_SECRET {{GetPrivateAzureRegistryServer}}
 {{end}}
 
-installKubeletKubectlAndKubeProxy
+installKubeletKubectlKubeadmAndKubeProxy
 
 if [[ $OS != $COREOS_OS_NAME ]]; then
     ensureRPC
@@ -2050,6 +2148,7 @@ wait_for_file 3600 1 {{GetCustomSearchDomainsCSEScriptFilepath}} || exit $ERR_FI
 configureK8s
 
 configureCNI
+configureAzureStackInterfaces
 
 {{/* configure and enable dhcpv6 for dual stack feature */}}
 {{- if IsIPv6DualStackFeatureEnabled}}
@@ -2514,18 +2613,24 @@ func linuxCloudInitArtifactsHealthMonitorSh() (*asset, error) {
 var _linuxCloudInitArtifactsInitAksCustomCloudSh = []byte(`#!/bin/bash
 mkdir -p /root/AzureCACertificates
 # http://168.63.129.16 is a constant for the host's wireserver endpoint
-certs=$(curl "http://168.63.129.16/machine?comp=acmspackage&type=cacertificates&ext=json")
-IFS_backup=$IFS
-IFS=$'\r\n'
-certNames=($(echo $certs | grep -oP '(?<=Name\": \")[^\"]*'))
-certBodies=($(echo $certs | grep -oP '(?<=CertBody\": \")[^\"]*'))
-for i in ${!certBodies[@]}; do
-    echo ${certBodies[$i]}  | sed 's/\\r\\n/\n/g' | sed 's/\\//g' > "/root/AzureCACertificates/$(echo ${certNames[$i]} | sed 's/.cer/.crt/g')"
-done
-IFS=$IFS_backup
+# certs=$(curl "http://168.63.129.16/machine?comp=acmspackage&type=cacertificates&ext=json")
+# IFS_backup=$IFS
+# IFS=$'\r\n'
+# certNames=($(echo $certs | grep -oP '(?<=Name\": \")[^\"]*'))
+# certBodies=($(echo $certs | grep -oP '(?<=CertBody\": \")[^\"]*'))
+# for i in ${!certBodies[@]}; do
+#     echo ${certBodies[$i]}  | sed 's/\\r\\n/\n/g' | sed 's/\\//g' > "/root/AzureCACertificates/$(echo ${certNames[$i]} | sed 's/.cer/.crt/g')"
+# done
+# IFS=$IFS_backup
 
-cp /root/AzureCACertificates/*.crt /usr/local/share/ca-certificates/
-/usr/sbin/update-ca-certificates
+# cp /root/AzureCACertificates/*.crt /usr/local/share/ca-certificates/
+# /usr/sbin/update-ca-certificates
+
+# Copying the AzureStack root certificate to the appropriate store to be updated.
+AZURESTACK_ROOT_CERTIFICATE_SOURCE_PATH="/var/lib/waagent/Certificates.pem"
+AZURESTACK_ROOT_CERTIFICATE__DEST_PATH="/usr/local/share/ca-certificates/azsCertificate.crt"
+cp $AZURESTACK_ROOT_CERTIFICATE_SOURCE_PATH $AZURESTACK_ROOT_CERTIFICATE__DEST_PATH
+update-ca-certificates
 
 # This copies the updated bundle to the location used by OpenSSL which is commonly used
 cp /etc/ssl/certs/ca-certificates.crt /usr/lib/ssl/cert.pem

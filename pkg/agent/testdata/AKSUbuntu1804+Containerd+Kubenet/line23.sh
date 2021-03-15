@@ -89,7 +89,7 @@ CLI_TOOL="crictl"
 
 installNetworkPlugin
 
-installKubeletKubectlAndKubeProxy
+installKubeletKubectlKubeadmAndKubeProxy
 
 if [[ $OS != $COREOS_OS_NAME ]]; then
     ensureRPC
@@ -100,6 +100,7 @@ createKubeManifestDir
 configureK8s
 
 configureCNI
+configureAzureStackInterfaces
 
 
 ensureContainerd 

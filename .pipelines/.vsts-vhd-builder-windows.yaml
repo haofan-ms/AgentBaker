@@ -47,11 +47,6 @@ pr: none
 
 jobs:
 - job: build_vhd_windows
-  timeoutInMinutes: 150
-  strategy:
-    maxParallel: 0
-  pool:
-    name: $(BUILD_POOL)
   steps:
   - bash: |
       if [[ -n ${SIG_GALLERY_NAME} && -n ${SIG_IMAGE_NAME} && -n ${SIG_IMAGE_VERSION} ]]; then m="sigMode"; else m="default"; fi && \

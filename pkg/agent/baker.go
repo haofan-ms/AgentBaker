@@ -273,6 +273,87 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 	cs := config.ContainerService
 	profile := config.AgentPoolProfile
 	return template.FuncMap{
+		// TODO ASH DELETE
+		"IsControlPlane": func() bool {
+			return config.BootstrapToken != ""
+		},
+		"NeedsTLSBoostraping": func() bool {
+			return config.ContainerService.Properties.OrchestratorProfile.KubernetesConfig.NeedsTLSBoostraping()
+		},
+		// TODO ASH DELETE
+		"ServiceCidr": func() string {
+			return config.ContainerService.Properties.OrchestratorProfile.KubernetesConfig.ServiceCIDR
+		},
+		// TODO ASH DELETE
+		"KubernetesVersion": func() string {
+			return config.ContainerService.Properties.OrchestratorProfile.OrchestratorVersion
+		},
+		// TODO ASH DELETE
+		"EtcdVersion": func() string {
+			return config.ContainerService.Properties.OrchestratorProfile.KubernetesConfig.EtcdVersion
+		},
+		// TODO ASH DELETE
+		"ResourceGroupName": func() string {
+			return config.ResourceGroupName
+		},
+		// TODO ASH DELETE
+		"PodCIDR": func() string {
+			return config.ContainerService.Properties.OrchestratorProfile.KubernetesConfig.ClusterSubnet
+		},
+		// TODO ASH DELETE
+		"NetworkPluging": func() string {
+			if cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin == NetworkPluginKubenet {
+				return "kubenet"
+			}
+			return "cni"
+		},
+		// TODO ASH DELETE
+		"NonMasqueradeCIDR": func() string {
+			if cs.Properties.IsIPMasqAgentEnabled() {
+				return "0.0.0.0/0"
+			}
+			return config.ContainerService.Properties.OrchestratorProfile.KubernetesConfig.ClusterSubnet
+		},
+		// TODO ASH configurable
+		"CGroupDriver": func() string {
+			// kubeadm recommends the systemd cgroup driver
+			if config.BootstrapToken != "" {
+				return "systemd"
+			}
+			return "cgroupfs"
+		},
+		// TODO ASH DELETE
+		"GetAddonsURI": func() string {
+			addons := []string{}
+			if cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin == NetworkPluginKubenet {
+				addons = append(addons, "https://jadarsiearchive.blob.core.windows.net/pub/ip-masq-agent-kubenet.yaml")
+			} else {
+				addons = append(addons, "https://jadarsiearchive.blob.core.windows.net/pub/ip-masq-agent-azure.yaml")
+			}
+			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/kube-state-metrics.yaml")
+			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/coredns-custom-configmap.yaml")
+			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/azuredisk-csi-driver-deployment.yaml")
+			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/storage-classes.yaml")
+			return strings.Join(addons, " ")
+		},
+		// TODO ASH DELETE
+		"BootstrapToken": func() string {
+			return config.BootstrapToken
+		},
+		// TODO ASH DELETE
+		"CACertificateHash": func() string {
+			// TODO ASH handle error
+			caCert := config.ContainerService.Properties.CertificateProfile.CaCertificate
+			hash, err := certificateHash(caCert)
+			if err != nil {
+				panic(err)
+			}
+			return hash
+		},
+		// TODO ASH take overrides as parameter
+		"GetCPKubernetesLabels": func() string {
+			return "kubernetes.azure.com/role=master"
+		},
 		"Disable1804SystemdResolved": func() bool {
 			return config.Disable1804SystemdResolved
 		},
@@ -573,6 +654,9 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 		},
 		"IsAKSCustomCloud": func() bool {
 			return cs.IsAKSCustomCloud()
+		},
+		"IsAzureStackCloud": func() bool {
+			return cs.IsAzureStackCloud()
 		},
 		"GetInitAKSCustomCloudFilepath": func() string {
 			return initAKSCustomCloudFilepath

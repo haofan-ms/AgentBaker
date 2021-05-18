@@ -139,7 +139,7 @@ wait_for_file 3600 1 {{GetCustomSearchDomainsCSEScriptFilepath}} || exit $ERR_FI
 configureK8s
 
 configureCNI
-configureAzureStackInterfaces
+customizeCNI
 
 {{/* configure and enable dhcpv6 for dual stack feature */}}
 {{- if IsIPv6DualStackFeatureEnabled}}
@@ -168,6 +168,9 @@ configureSwapFile
 
 ensureSysctl
 ensureKubelet
+{{- if IsControlPlane}}
+customizeK8s
+{{end}}
 ensureJournal
 ensureUpdateNodeLabels
 

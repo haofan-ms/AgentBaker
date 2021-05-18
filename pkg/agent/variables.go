@@ -29,6 +29,8 @@ func getCustomDataVariables(config *datamodel.NodeBootstrappingConfiguration) pa
 			"reconcilePrivateHostsService":   getBase64EncodedGzippedCustomScript(reconcilePrivateHostsService, config),
 			"updateNodeLabelsSystemdService": getBase64EncodedGzippedCustomScript(updateNodeLabelsSystemdService, config),
 			"updateNodeLabelsScript":         getBase64EncodedGzippedCustomScript(updateNodeLabelsScript, config),
+			"kubeadmconfig":                  getBase64EncodedGzippedCustomScript(kubeadmConfig, config),
+			"auditpolicy":                    getBase64EncodedGzippedCustomScript(auditPolicy, config),
 		},
 	}
 

@@ -70,6 +70,63 @@ configureSecrets(){
     echo "${ETCD_PEER_CERT}" | base64 --decode > "${ETCD_PEER_CERTIFICATE_PATH}"
 }
 
+customizeK8s() {
+    mkdir -p /etc/kubernetes/pki/etcd
+    cp -p /etc/kubernetes/certs/ca.crt /etc/kubernetes/pki/ca.crt
+    cp -p /etc/kubernetes/pki/sa.key /etc/kubernetes/pki/sa.pub
+    cp -p /etc/kubernetes/pki/ca.crt /etc/kubernetes/pki/front-proxy-ca.crt
+    cp -p /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/front-proxy-ca.key
+    cp -p /etc/kubernetes/pki/ca.crt /etc/kubernetes/pki/etcd/ca.crt
+    cp -p /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/etcd/ca.key
+
+    FIRST_MASTER_NODE=true
+    echo $NODE_NAME | grep -E '*-0$' > /dev/null
+    if [[ "$?" != "0" ]]; then
+        FIRST_MASTER_NODE=false
+    fi
+    if [[ -d /var/lib/etcddisk/etcd/member/ ]]; then
+        FIRST_MASTER_NODE=false
+    fi
+
+    if [ "${FIRST_MASTER_NODE}" = true ]; then
+        retrycmd_if_failure 150 10 300 kubeadm init phase certs all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 150 10 300 kubeadm init phase kubeconfig all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 150 10 300 kubeadm init phase control-plane all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
+        retrycmd_if_failure 150 10 300 kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --skip-phases=control-plane,certs,kubeconfig --ignore-preflight-errors=all  -v 9
+
+        cat << EOF | retrycmd_if_failure 5 10 30 kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nodegroup
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:nodes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:node
+EOF
+
+        for ADDON in {{GetAddonsURI}}; do
+            retrycmd_if_failure 5 10 30 kubectl apply -f ${ADDON} --kubeconfig /etc/kubernetes/admin.conf
+        done
+    else
+        retrycmd_if_failure 150 10 300 kubeadm join phase control-plane-prepare all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
+        retrycmd_if_failure 150 10 300 kubeadm join phase kubelet-start --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 150 10 300 kubeadm join phase control-plane-join all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+    fi
+
+    # TODO ASH Delete
+    mkdir -p /home/${ADMINUSER}/.kube
+    cp /etc/kubernetes/admin.conf /home/${ADMINUSER}/.kube/config
+    chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube
+    chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube/config
+}
+
 {{- if EnableHostsConfigAgent}}
 configPrivateClusterHosts() {
   systemctlEnableAndStart reconcile-private-hosts || exit $ERR_SYSTEMCTL_START_FAIL
@@ -275,10 +332,20 @@ configureCNI() {
     {{end}}
 }
 
+customizeCNI() {
+    {{- if IsAzureStackCloud}}
+    if [[ "${NETWORK_PLUGIN}" = "azure" ]]; then
+        generateIPAMFileSource
+        local temp=$(mktemp)
+        cp $CNI_CONFIG_DIR/10-azure.conflist ${temp}
+        jq '.plugins[0].ipam.environment = "mas"' ${temp} > $CNI_CONFIG_DIR/10-azure.conflist
+    fi
+    {{end}}
+}
+
 configureCNIIPTables() {
     if [[ "${NETWORK_PLUGIN}" = "azure" ]]; then
-        jq '.plugins[0].ipam.environment = "mas"' $CNI_BIN_DIR/10-azure.conflist > $CNI_CONFIG_DIR/10-azure.conflist
-        rm -f $CNI_BIN_DIR/10-azure.conflist
+        mv $CNI_BIN_DIR/10-azure.conflist $CNI_CONFIG_DIR/
         chmod 600 $CNI_CONFIG_DIR/10-azure.conflist
         if [[ "${NETWORK_POLICY}" == "calico" ]]; then
           sed -i 's#"mode":"bridge"#"mode":"transparent"#g' $CNI_CONFIG_DIR/10-azure.conflist
@@ -289,52 +356,19 @@ configureCNIIPTables() {
     fi
 }
 
-disable1804SystemdResolved() {
-    ls -ltr /etc/resolv.conf
-    cat /etc/resolv.conf
-    {{- if Disable1804SystemdResolved}}
-    UBUNTU_RELEASE=$(lsb_release -r -s)
-    if [[ ${UBUNTU_RELEASE} == "18.04" ]]; then
-        echo "Ingorings systemd-resolved query service but using its resolv.conf file"
-        echo "This is the simplest approach to workaround resolved issues without completely uninstall it"
-        [ -f /run/systemd/resolve/resolv.conf ] && sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
-        ls -ltr /etc/resolv.conf
-        cat /etc/resolv.conf
-    fi
-    {{- else}}
-    echo "Disable1804SystemdResolved is false. Skipping."
-    {{- end}}
-}
-
-configureAzureStackInterfaces() {
+{{- if IsAzureStackCloud}}
+generateIPAMFileSource() {
     NETWORK_INTERFACES_FILE="/etc/kubernetes/network_interfaces.json"
     AZURE_CNI_CONFIG_FILE="/etc/kubernetes/interfaces.json"
-    AZURESTACK_ENVIRONMENT_JSON_PATH="/etc/kubernetes/AzureStackCloud.json"
+    AZURESTACK_ENVIRONMENT_JSON_PATH="/etc/kubernetes/azurestackcloud.json"
     NETWORK_API_VERSION="2018-08-01"
 
-    SERVICE_MANAGEMENT_ENDPOINT=$(jq -r '.serviceManagementEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH}) #
-    ACTIVE_DIRECTORY_ENDPOINT=$(jq -r '.activeDirectoryEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH}) #
-    RESOURCE_MANAGER_ENDPOINT=$(jq -r '.resourceManagerEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH}) #
+    SERVICE_MANAGEMENT_ENDPOINT=$(jq -r '.serviceManagementEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
+    ACTIVE_DIRECTORY_ENDPOINT=$(jq -r '.activeDirectoryEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
+    RESOURCE_MANAGER_ENDPOINT=$(jq -r '.resourceManagerEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
+    TOKEN_URL=$(jq -r '.tokenAudience' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
 
-    # if [[ ${IDENTITY_SYSTEM,,} == "adfs" ]]; then #
-    TOKEN_URL="${ACTIVE_DIRECTORY_ENDPOINT}/oauth2/token"
-    # else
-    #     TOKEN_URL="${ACTIVE_DIRECTORY_ENDPOINT}${TENANT_ID}/oauth2/token"
-    # fi
-
-    echo "Generating token for Azure Resource Manager"
-    echo "------------------------------------------------------------------------"
-    echo "Parameters"
-    echo "------------------------------------------------------------------------"
-    echo "SERVICE_PRINCIPAL_CLIENT_ID:     ..."
-    echo "SERVICE_PRINCIPAL_CLIENT_SECRET: ..."
-    echo "SERVICE_MANAGEMENT_ENDPOINT:     ${SERVICE_MANAGEMENT_ENDPOINT}"
-    echo "ACTIVE_DIRECTORY_ENDPOINT:       ${ACTIVE_DIRECTORY_ENDPOINT}"
-    echo "TENANT_ID:                       ${TENANT_ID}"
-    echo "IDENTITY_SYSTEM:                 ${IDENTITY_SYSTEM}"
-    echo "TOKEN_URL:                       ${TOKEN_URL}"
-    echo "------------------------------------------------------------------------"
-
+    set +x
     TOKEN=$(curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X POST \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "grant_type=client_credentials" \
@@ -348,20 +382,11 @@ configureAzureStackInterfaces() {
         exit 120
     fi
 
-    echo "Fetching network interface configuration for node"
-    echo "------------------------------------------------------------------------"
-    echo "Parameters"
-    echo "------------------------------------------------------------------------"
-    echo "RESOURCE_MANAGER_ENDPOINT: $RESOURCE_MANAGER_ENDPOINT"
-    echo "SUBSCRIPTION_ID:           $SUBSCRIPTION_ID"
-    echo "RESOURCE_GROUP:            $RESOURCE_GROUP"
-    echo "NETWORK_API_VERSION:       $NETWORK_API_VERSION"
-    echo "------------------------------------------------------------------------"
-
     curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X GET \
         -H "Authorization: Bearer ${TOKEN}" \
         -H "Content-Type: application/json" \
         "${RESOURCE_MANAGER_ENDPOINT}subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Network/networkInterfaces?api-version=${NETWORK_API_VERSION}" > ${NETWORK_INTERFACES_FILE}
+    set -x
 
     if [[ ! -s ${NETWORK_INTERFACES_FILE} ]]; then
         echo "Error fetching network interface configuration for node"
@@ -400,6 +425,24 @@ configureAzureStackInterfaces() {
 
     echo ${AZURE_CNI_CONFIG} > ${AZURE_CNI_CONFIG_FILE}
     chmod 0444 ${AZURE_CNI_CONFIG_FILE}
+}
+{{end}}
+
+disable1804SystemdResolved() {
+    ls -ltr /etc/resolv.conf
+    cat /etc/resolv.conf
+    {{- if Disable1804SystemdResolved}}
+    UBUNTU_RELEASE=$(lsb_release -r -s)
+    if [[ ${UBUNTU_RELEASE} == "18.04" ]]; then
+        echo "Ingorings systemd-resolved query service but using its resolv.conf file"
+        echo "This is the simplest approach to workaround resolved issues without completely uninstall it"
+        [ -f /run/systemd/resolve/resolv.conf ] && sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+        ls -ltr /etc/resolv.conf
+        cat /etc/resolv.conf
+    fi
+    {{- else}}
+    echo "Disable1804SystemdResolved is false. Skipping."
+    {{- end}}
 }
 
 {{- if NeedsContainerd}}

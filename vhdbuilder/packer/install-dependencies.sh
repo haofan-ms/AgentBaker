@@ -14,12 +14,10 @@ echo ""
 echo "Components downloaded in this VHD build (some of the below components might get deleted during cluster provisioning if they are not needed):" >> ${VHD_LOGS_FILEPATH}
 
 AUDITD_ENABLED=true
-installAzureCLI
 installDeps
 cat << EOF >> ${VHD_LOGS_FILEPATH}
   - azure-cli
   - apache2-utils
-  - python-pip
   - apt-transport-https
   - auditd
   - blobfuse=1.3.5

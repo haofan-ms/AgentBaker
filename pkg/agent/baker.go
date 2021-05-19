@@ -368,11 +368,11 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 		},
 		"GetAgentKubernetesLabels": func(profile *datamodel.AgentPoolProfile) string {
 			return profile.GetKubernetesLabels(normalizeResourceGroupNameForLabel(config.ResourceGroupName),
-				false, config.EnableNvidia)
+				false, config.EnableNvidia, config.BootstrapToken != "")
 		},
 		"GetAgentKubernetesLabelsDeprecated": func(profile *datamodel.AgentPoolProfile) string {
 			return profile.GetKubernetesLabels(normalizeResourceGroupNameForLabel(config.ResourceGroupName),
-				true, config.EnableNvidia)
+				true, config.EnableNvidia, config.BootstrapToken != "")
 		},
 		"GetKubeletConfigFileContent": func() string {
 			if profile.KubernetesConfig == nil {

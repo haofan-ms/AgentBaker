@@ -1087,9 +1087,13 @@ func (a *AgentPoolProfile) IsSpotScaleSet() bool {
 }
 
 // GetKubernetesLabels returns a k8s API-compliant labels string for nodes in this profile
-func (a *AgentPoolProfile) GetKubernetesLabels(rg string, deprecated bool, nvidiaEnabled bool) string {
+func (a *AgentPoolProfile) GetKubernetesLabels(rg string, deprecated bool, nvidiaEnabled bool, controlPlane bool) string {
 	var buf bytes.Buffer
-	buf.WriteString("kubernetes.azure.com/role=agent")
+	if controlPlane {
+		buf.WriteString("kubernetes.azure.com/role=master")
+	} else {
+		buf.WriteString("kubernetes.azure.com/role=agent")
+	}
 	if deprecated {
 		buf.WriteString(",node-role.kubernetes.io/agent=")
 		buf.WriteString(",kubernetes.io/role=agent")

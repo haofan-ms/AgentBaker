@@ -361,12 +361,14 @@ generateIPAMFileSource() {
     NETWORK_INTERFACES_FILE="/etc/kubernetes/network_interfaces.json"
     AZURE_CNI_CONFIG_FILE="/etc/kubernetes/interfaces.json"
     AZURESTACK_ENVIRONMENT_JSON_PATH="/etc/kubernetes/azurestackcloud.json"
+    AZURE_JSON_PATH="/etc/kubernetes/azure.json"
     NETWORK_API_VERSION="2018-08-01"
 
     SERVICE_MANAGEMENT_ENDPOINT=$(jq -r '.serviceManagementEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
     ACTIVE_DIRECTORY_ENDPOINT=$(jq -r '.activeDirectoryEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
     RESOURCE_MANAGER_ENDPOINT=$(jq -r '.resourceManagerEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
-    TOKEN_URL=$(jq -r '.tokenAudience' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
+    TENANT_ID=$(jq -r '.tenantId' ${AZURE_JSON_PATH})
+    TOKEN_URL=$(echo ${ACTIVE_DIRECTORY_ENDPOINT}${TENANT_ID}/oauth2/token)
 
     set +x
     TOKEN=$(curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X POST \

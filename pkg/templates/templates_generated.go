@@ -3068,6 +3068,7 @@ nodeRegistration:
     node-labels: {{GetCPKubernetesLabels}}
     network-plugin: {{NetworkPluging}}
     non-masquerade-cidr: {{NonMasqueradeCIDR}}
+    cgroup-driver: "{{CGroupDriver}}"
 localAPIEndpoint:
   advertiseAddress: ""
   bindPort: 443
@@ -3085,6 +3086,7 @@ nodeRegistration:
     node-labels: {{GetCPKubernetesLabels}}
     network-plugin: {{NetworkPluging}}
     non-masquerade-cidr: {{NonMasqueradeCIDR}}
+    cgroup-driver: "{{CGroupDriver}}"
 discovery:
   bootstrapToken:
     token: {{BootstrapToken}}

@@ -5225,6 +5225,7 @@ try
                 -KubeClusterCIDR $global:KubeClusterCIDR `+"`"+`
                 -KubeServiceCIDR $global:KubeServiceCIDR `+"`"+`
                 -VNetCIDR $global:VNetCIDR `+"`"+`
+                -IsAzureStack {{if IsAKSCustomCloud}}$true{{else}}$false{{end}} ` + "`" + `
                 -IsDualStackEnabled $global:IsDualStackEnabled
 
             if ($TargetEnvironment -ieq "AzureStackCloud") {
@@ -5403,6 +5404,8 @@ Set-AzureCNIConfig
         [Parameter(Mandatory=$true)][string]
         $VNetCIDR,
         [Parameter(Mandatory=$true)][bool]
+        $IsAzureStack,
+        [Parameter(Mandatory=$true)][bool]
         $IsDualStackEnabled
     )
     # Fill in DNS information for kubernetes.
@@ -5455,6 +5458,10 @@ Set-AzureCNIConfig
     }
     else {
         $configJson.plugins[0].AdditionalArgs[1].Value.DestinationPrefix = $KubeServiceCIDR
+    }
+
+    if ($IsAzureStack) {
+        Add-Member -InputObject $configJson.plugins[0].ipam -MemberType NoteProperty -Name "environment" -Value "mas"
     }
 
     $aclRule1 = [PSCustomObject]@{

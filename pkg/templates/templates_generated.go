@@ -801,6 +801,35 @@ roleRef:
   name: system:node
 EOF
 
+        mkdir -p /etc/kubernetes/kustomize/coredns
+        cat << EOF > /etc/kubernetes/kustomize/coredns/add_tolerations.yaml
+- op: add
+  path: "/spec/template/spec/tolerations/-"
+  value:
+    operator: "Exists"
+    effect: NoSchedule
+- op: add
+  path: "/spec/template/spec/tolerations/-"
+  value:
+    operator: "Exists"
+    effect: NoExecute
+EOF
+        cat << EOF > /etc/kubernetes/kustomize/coredns/kustomization.yaml
+---
+resources:
+- deployment.yaml
+patchesJson6902:
+- path: add_tolerations.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: coredns
+    namespace: kube-system
+EOF
+        retrycmd_if_failure_no_stats 5 10 30 kubectl get deploy coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml
+        retrycmd_if_failure_no_stats 5 10 30 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+
         for ADDON in {{GetAddonsURI}}; do
             retrycmd_if_failure 5 10 30 kubectl apply -f ${ADDON} --kubeconfig /etc/kubernetes/admin.conf
         done
@@ -2424,12 +2453,12 @@ fi
 
 VALIDATION_ERR=0
 
-API_SERVER_DNS_RETRIES=20
+API_SERVER_DNS_RETRIES=360
 if [[ $API_SERVER_NAME == *.privatelink.* ]]; then
   API_SERVER_DNS_RETRIES=200
 fi
 {{- if not EnableHostsConfigAgent}}
-RES=$(retrycmd_if_failure ${API_SERVER_DNS_RETRIES} 1 3 nslookup ${API_SERVER_NAME})
+RES=$(retrycmd_if_failure ${API_SERVER_DNS_RETRIES} 10 3 nslookup ${API_SERVER_NAME})
 STS=$?
 {{- else}}
 STS=0
@@ -2441,11 +2470,11 @@ if [[ $STS != 0 ]]; then
         VALIDATION_ERR=$ERR_K8S_API_SERVER_DNS_LOOKUP_FAIL
     fi
 else
-    API_SERVER_CONN_RETRIES=50
+    API_SERVER_CONN_RETRIES=360
     if [[ $API_SERVER_NAME == *.privatelink.* ]]; then
         API_SERVER_CONN_RETRIES=100
     fi
-    retrycmd_if_failure ${API_SERVER_CONN_RETRIES} 1 3 nc -vz ${API_SERVER_NAME} 443 || VALIDATION_ERR=$ERR_K8S_API_SERVER_CONN_FAIL
+    retrycmd_if_failure ${API_SERVER_CONN_RETRIES} 10 3 nc -vz ${API_SERVER_NAME} 443 || VALIDATION_ERR=$ERR_K8S_API_SERVER_CONN_FAIL
 fi
 
 if $REBOOTREQUIRED; then

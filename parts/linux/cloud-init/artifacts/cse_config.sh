@@ -110,6 +110,35 @@ roleRef:
   name: system:node
 EOF
 
+        mkdir -p /etc/kubernetes/kustomize/coredns
+        cat << EOF > /etc/kubernetes/kustomize/coredns/add_tolerations.yaml
+- op: add
+  path: "/spec/template/spec/tolerations/-"
+  value:
+    operator: "Exists"
+    effect: NoSchedule
+- op: add
+  path: "/spec/template/spec/tolerations/-"
+  value:
+    operator: "Exists"
+    effect: NoExecute
+EOF
+        cat << EOF > /etc/kubernetes/kustomize/coredns/kustomization.yaml
+---
+resources:
+- deployment.yaml
+patchesJson6902:
+- path: add_tolerations.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: coredns
+    namespace: kube-system
+EOF
+        retrycmd_if_failure_no_stats 5 10 30 kubectl get deploy coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml
+        retrycmd_if_failure_no_stats 5 10 30 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+
         for ADDON in {{GetAddonsURI}}; do
             retrycmd_if_failure 5 10 30 kubectl apply -f ${ADDON} --kubeconfig /etc/kubernetes/admin.conf
         done

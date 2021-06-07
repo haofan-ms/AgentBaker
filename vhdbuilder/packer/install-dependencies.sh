@@ -503,17 +503,13 @@ done
 # need to cover previously supported version for VMAS scale up scenario
 # So keeping as many versions as we can - those unsupported version can be removed when we don't have enough space
 # below are the required to support versions
-# v1.17.13
-# v1.17.16
-# v1.18.10
-# v1.18.14
-# v1.19.6
-# v1.19.7
-# v1.20.2
+
 # NOTE that we only keep the latest one per k8s patch version as kubelet/kubectl is decided by VHD version
 K8S_VERSIONS="
-1.18.10
-1.18.15
+1.17.17
+1.18.18
+1.19.10
+1.20.6
 "
 for PATCHED_KUBERNETES_VERSION in ${K8S_VERSIONS}; do
   # Only need to store k8s components >= 1.19 for containerd VHDs
@@ -549,17 +545,13 @@ ls -ltr /usr/local/bin/* >> ${VHD_LOGS_FILEPATH}
 # this is used by kube-proxy and need to cover previously supported version for VMAS scale up scenario
 # So keeping as many versions as we can - those unsupported version can be removed when we don't have enough space
 # below are the required to support versions
-# v1.17.13
-# v1.17.16
-# v1.18.10
-# v1.18.14
-# v1.19.6
-# v1.19.7
-# v1.20.2
+
 # NOTE that we keep multiple files per k8s patch version as kubeproxy version is decided by CCP.
 PATCHED_HYPERKUBE_IMAGES="
-1.18.10
-1.18.15
+1.17.17
+1.18.18
+1.19.10
+1.20.6
 "
 for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
   # Only need to store k8s components >= 1.19 for containerd VHDs

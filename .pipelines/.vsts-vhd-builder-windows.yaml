@@ -48,10 +48,6 @@ pr: none
 jobs:
 - job: build_vhd_windows
   timeoutInMinutes: 150
-  strategy:
-    maxParallel: 0
-  pool:
-    name: $(BUILD_POOL)
   steps:
   - bash: |
       if [[ -n ${SIG_GALLERY_NAME} && -n ${SIG_IMAGE_NAME} && -n ${SIG_IMAGE_VERSION} ]]; then m="sigMode"; else m="default"; fi && \
@@ -127,7 +123,6 @@ jobs:
       -e VHD_NAME=${VHD_NAME} \
       ${DEIS_GO_DEV_IMAGE} make -f packer.mk az-copy
     displayName: Copying resource to Classic Storage Account
-    condition: and(eq(variables.DRY_RUN, 'False'), eq(variables['MODE'], 'default'))
   - bash: |
       echo MODE=$(MODE) && \
       SA_NAME="$(cat packer-output | grep "storage name:" | cut -d " " -f 3)" && \
@@ -180,9 +175,8 @@ jobs:
       -e HYPERV_GENERATION="V1" \
       ${DEIS_GO_DEV_IMAGE} make -f packer.mk generate-sas
     displayName: Getting Shared Access Signature URI
-    condition: and(eq(variables.DRY_RUN, 'False'), eq(variables['MODE'], 'default'))
   - task: PublishPipelineArtifact@1
     inputs:
       artifactName: 'publishing-info'
       targetPath: 'vhd-publishing-info.json'
-    condition: and(eq(variables.DRY_RUN, 'False'), ne(variables['MODE'], 'sigMode'))
+ 

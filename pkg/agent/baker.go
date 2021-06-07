@@ -338,6 +338,7 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/coredns-custom-configmap.yaml")
 			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/azuredisk-csi-driver-deployment.yaml")
 			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/storage-classes.yaml")
+			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/kube-metrics-server.yaml")
 			return strings.Join(addons, " ")
 		},
 		// TODO ASH DELETE

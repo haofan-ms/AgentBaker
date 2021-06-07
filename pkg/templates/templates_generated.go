@@ -7,6 +7,9 @@
 // linux/cloud-init/artifacts/containerd-monitor.service
 // linux/cloud-init/artifacts/containerd-monitor.timer
 // linux/cloud-init/artifacts/containerd.service
+// linux/cloud-init/artifacts/coredns-cluster-ip.yaml
+// linux/cloud-init/artifacts/coredns-kustomization.yaml
+// linux/cloud-init/artifacts/coredns-tolerations.yaml
 // linux/cloud-init/artifacts/cse_cmd.sh
 // linux/cloud-init/artifacts/cse_config.sh
 // linux/cloud-init/artifacts/cse_helpers.sh
@@ -602,6 +605,88 @@ func linuxCloudInitArtifactsContainerdService() (*asset, error) {
 	return a, nil
 }
 
+var _linuxCloudInitArtifactsCorednsClusterIpYaml = []byte(`apiVersion: v1
+kind: Service
+metadata:
+  name: kube-dns
+  namespace: kube-system
+spec:
+  clusterIP: {{DNSServiceIP}}
+`)
+
+func linuxCloudInitArtifactsCorednsClusterIpYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsCorednsClusterIpYaml, nil
+}
+
+func linuxCloudInitArtifactsCorednsClusterIpYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsCorednsClusterIpYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/coredns-cluster-ip.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _linuxCloudInitArtifactsCorednsKustomizationYaml = []byte(`---
+resources:
+- deployment.yaml
+- service.yaml
+patchesStrategicMerge:
+- cluster-ip.yaml
+patchesJson6902:
+- path: tolerations.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: coredns
+    namespace: kube-system
+`)
+
+func linuxCloudInitArtifactsCorednsKustomizationYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsCorednsKustomizationYaml, nil
+}
+
+func linuxCloudInitArtifactsCorednsKustomizationYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsCorednsKustomizationYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/coredns-kustomization.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _linuxCloudInitArtifactsCorednsTolerationsYaml = []byte(`- op: add
+  path: "/spec/template/spec/tolerations/-"
+  value:
+    operator: "Exists"
+    effect: NoSchedule
+- op: add
+  path: "/spec/template/spec/tolerations/-"
+  value:
+    operator: "Exists"
+    effect: NoExecute
+`)
+
+func linuxCloudInitArtifactsCorednsTolerationsYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsCorednsTolerationsYaml, nil
+}
+
+func linuxCloudInitArtifactsCorednsTolerationsYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsCorednsTolerationsYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/coredns-tolerations.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _linuxCloudInitArtifactsCse_cmdSh = []byte(`echo $(date),$(hostname) > /var/log/azure/cluster-provision-cse-output.log;
 {{GetVariable "outBoundCmd"}}
 for i in $(seq 1 1200); do
@@ -801,33 +886,8 @@ roleRef:
   name: system:node
 EOF
 
-        mkdir -p /etc/kubernetes/kustomize/coredns
-        cat << EOF > /etc/kubernetes/kustomize/coredns/add_tolerations.yaml
-- op: add
-  path: "/spec/template/spec/tolerations/-"
-  value:
-    operator: "Exists"
-    effect: NoSchedule
-- op: add
-  path: "/spec/template/spec/tolerations/-"
-  value:
-    operator: "Exists"
-    effect: NoExecute
-EOF
-        cat << EOF > /etc/kubernetes/kustomize/coredns/kustomization.yaml
----
-resources:
-- deployment.yaml
-patchesJson6902:
-- path: add_tolerations.yaml
-  target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: coredns
-    namespace: kube-system
-EOF
         retrycmd_if_failure_no_stats 5 10 30 kubectl get deploy coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml
+        retrycmd_if_failure_no_stats 5 10 30 kubectl get service coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/service.yaml
         retrycmd_if_failure_no_stats 5 10 30 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
 
         for ADDON in {{GetAddonsURI}}; do
@@ -4727,6 +4787,27 @@ write_files:
   content: !!binary |
     {{GetVariableProperty "cloudInitData" "auditpolicy"}}
 
+- path: /etc/kubernetes/kustomize/coredns/kustomization.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednskustomization"}}
+
+- path: /etc/kubernetes/kustomize/coredns/cluster-ip.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednsclusterip"}}
+
+- path: /etc/kubernetes/kustomize/coredns/tolerations.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednstolerations"}}
+
 disk_setup:
   /dev/disk/azure/scsi1/lun0:
     table_type: gpt
@@ -7381,6 +7462,9 @@ var _bindata = map[string]func() (*asset, error){
 	"linux/cloud-init/artifacts/containerd-monitor.service":                linuxCloudInitArtifactsContainerdMonitorService,
 	"linux/cloud-init/artifacts/containerd-monitor.timer":                  linuxCloudInitArtifactsContainerdMonitorTimer,
 	"linux/cloud-init/artifacts/containerd.service":                        linuxCloudInitArtifactsContainerdService,
+	"linux/cloud-init/artifacts/coredns-cluster-ip.yaml":                   linuxCloudInitArtifactsCorednsClusterIpYaml,
+	"linux/cloud-init/artifacts/coredns-kustomization.yaml":                linuxCloudInitArtifactsCorednsKustomizationYaml,
+	"linux/cloud-init/artifacts/coredns-tolerations.yaml":                  linuxCloudInitArtifactsCorednsTolerationsYaml,
 	"linux/cloud-init/artifacts/cse_cmd.sh":                                linuxCloudInitArtifactsCse_cmdSh,
 	"linux/cloud-init/artifacts/cse_config.sh":                             linuxCloudInitArtifactsCse_configSh,
 	"linux/cloud-init/artifacts/cse_helpers.sh":                            linuxCloudInitArtifactsCse_helpersSh,
@@ -7489,6 +7573,9 @@ var _bintree = &bintree{nil, map[string]*bintree{
 				"containerd-monitor.service":                &bintree{linuxCloudInitArtifactsContainerdMonitorService, map[string]*bintree{}},
 				"containerd-monitor.timer":                  &bintree{linuxCloudInitArtifactsContainerdMonitorTimer, map[string]*bintree{}},
 				"containerd.service":                        &bintree{linuxCloudInitArtifactsContainerdService, map[string]*bintree{}},
+				"coredns-cluster-ip.yaml":                   &bintree{linuxCloudInitArtifactsCorednsClusterIpYaml, map[string]*bintree{}},
+				"coredns-kustomization.yaml":                &bintree{linuxCloudInitArtifactsCorednsKustomizationYaml, map[string]*bintree{}},
+				"coredns-tolerations.yaml":                  &bintree{linuxCloudInitArtifactsCorednsTolerationsYaml, map[string]*bintree{}},
 				"cse_cmd.sh":                                &bintree{linuxCloudInitArtifactsCse_cmdSh, map[string]*bintree{}},
 				"cse_config.sh":                             &bintree{linuxCloudInitArtifactsCse_configSh, map[string]*bintree{}},
 				"cse_helpers.sh":                            &bintree{linuxCloudInitArtifactsCse_helpersSh, map[string]*bintree{}},

@@ -301,6 +301,10 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 			return config.ContainerService.Properties.OrchestratorProfile.KubernetesConfig.ClusterSubnet
 		},
 		// TODO ASH DELETE
+		"DNSServiceIP": func() string {
+			return config.ContainerService.Properties.OrchestratorProfile.KubernetesConfig.DNSServiceIP
+		},
+		// TODO ASH DELETE
 		"NetworkPluging": func() string {
 			if cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin == NetworkPluginKubenet {
 				return "kubenet"

@@ -639,6 +639,27 @@ write_files:
   content: !!binary |
     {{GetVariableProperty "cloudInitData" "auditpolicy"}}
 
+- path: /etc/kubernetes/kustomize/coredns/kustomization.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednskustomization"}}
+
+- path: /etc/kubernetes/kustomize/coredns/cluster-ip.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednsclusterip"}}
+
+- path: /etc/kubernetes/kustomize/coredns/tolerations.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednstolerations"}}
+
 disk_setup:
   /dev/disk/azure/scsi1/lun0:
     table_type: gpt

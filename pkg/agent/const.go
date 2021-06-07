@@ -95,6 +95,9 @@ const (
 	// kubernetesKubeletMonitorSystemdTimer     = "linux/cloud-init/artifacts/kubelet-monitor.timer" // TODO enable
 	kubeadmConfig                             = "linux/cloud-init/artifacts/kubeadm-config.yaml"
 	auditPolicy                               = "linux/cloud-init/artifacts/audit-policy.yaml"
+	corednsKustomization                      = "linux/cloud-init/artifacts/coredns-kustomization.yaml"
+	corednsClusterIP                          = "linux/cloud-init/artifacts/coredns-cluster-ip.yaml"
+	corednsTolerations                        = "linux/cloud-init/artifacts/coredns-tolerations.yaml"
 	kubernetesKubeletMonitorSystemdService    = "linux/cloud-init/artifacts/kubelet-monitor.service"
 	kubernetesDockerMonitorSystemdTimer       = "linux/cloud-init/artifacts/docker-monitor.timer"
 	kubernetesDockerMonitorSystemdService     = "linux/cloud-init/artifacts/docker-monitor.service"

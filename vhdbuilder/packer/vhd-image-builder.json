@@ -246,6 +246,11 @@
     },
     {
       "type": "file",
+      "source": "parts/linux/cloud-init/artifacts/audit-policy.yaml",
+      "destination": "/home/packer/audit-policy.yaml"
+    },
+    {
+      "type": "file",
       "source": "vhdbuilder/notice.txt",
       "destination": "/home/packer/NOTICE.txt"
     },

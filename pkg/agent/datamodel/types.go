@@ -717,7 +717,14 @@ type ContainerService struct {
 // IsAKSCustomCloud checks if it's in AKS custom cloud
 func (cs *ContainerService) IsAKSCustomCloud() bool {
 	return cs.Properties.CustomCloudEnv != nil &&
-		(strings.EqualFold(cs.Properties.CustomCloudEnv.Name, "akscustom") || strings.EqualFold(cs.Properties.CustomCloudEnv.Name, "azurestackcloud"))
+		(strings.EqualFold(cs.Properties.CustomCloudEnv.Name, "akscustom") ||
+			strings.EqualFold(cs.Properties.CustomCloudEnv.Name, AzureStackCloud))
+}
+
+// IsAzureStackCloud checks if it's in Azure Stack cloud
+func (cs *ContainerService) IsAzureStackCloud() bool {
+	return cs.Properties.CustomCloudEnv != nil &&
+		strings.EqualFold(cs.Properties.CustomCloudEnv.Name, AzureStackCloud)
 }
 
 // GetLocations returns all supported regions.
@@ -789,7 +796,14 @@ func (p *Properties) HasAvailabilityZones() bool {
 // IsAKSCustomCloud checks if it's in AKS custom cloud
 func (p *Properties) IsAKSCustomCloud() bool {
 	return p.CustomCloudEnv != nil &&
-		(strings.EqualFold(p.CustomCloudEnv.Name, "akscustom") || strings.EqualFold(p.CustomCloudEnv.Name, "azurestackcloud"))
+		(strings.EqualFold(p.CustomCloudEnv.Name, "akscustom") ||
+			strings.EqualFold(p.CustomCloudEnv.Name, AzureStackCloud))
+}
+
+// IsAzureStackCloud checks if it's in Azure Stack cloud
+func (p *Properties) IsAzureStackCloud() bool {
+	return p.CustomCloudEnv != nil &&
+		strings.EqualFold(p.CustomCloudEnv.Name, AzureStackCloud)
 }
 
 // IsIPMasqAgentEnabled returns true if the cluster has a hosted master and IpMasqAgent is disabled
@@ -1073,9 +1087,13 @@ func (a *AgentPoolProfile) IsSpotScaleSet() bool {
 }
 
 // GetKubernetesLabels returns a k8s API-compliant labels string for nodes in this profile
-func (a *AgentPoolProfile) GetKubernetesLabels(rg string, deprecated bool, nvidiaEnabled bool) string {
+func (a *AgentPoolProfile) GetKubernetesLabels(rg string, deprecated bool, nvidiaEnabled bool, controlPlane bool) string {
 	var buf bytes.Buffer
-	buf.WriteString("kubernetes.azure.com/role=agent")
+	if controlPlane {
+		buf.WriteString("kubernetes.azure.com/role=master")
+	} else {
+		buf.WriteString("kubernetes.azure.com/role=agent")
+	}
 	if deprecated {
 		buf.WriteString(",node-role.kubernetes.io/agent=")
 		buf.WriteString(",kubernetes.io/role=agent")
@@ -1376,6 +1394,12 @@ func (k *KubernetesConfig) GetOrderedKubeletConfigStringForPowershell() string {
 	return strings.TrimSuffix(buf.String(), ", ")
 }
 
+// NeedsTLSBoostraping returns true if flag --bootstrap-kubeconfig is passed to kubelet
+func (k *KubernetesConfig) NeedsTLSBoostraping() bool {
+	_, ok := k.KubeletConfig["--bootstrap-kubeconfig"]
+	return ok
+}
+
 // IsEnabled returns true if the addon is enabled
 func (a *KubernetesAddon) IsEnabled() bool {
 	if a.Enabled == nil {
@@ -1442,6 +1466,7 @@ type NodeBootstrappingConfiguration struct {
 	EnableNvidia                  bool
 	EnableACRTeleportPlugin       bool
 	TeleportdPluginURL            string
+	BootstrapToken                string
 }
 
 // AKSKubeletConfiguration contains the configuration for the Kubelet that AKS set

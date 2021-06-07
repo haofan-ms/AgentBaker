@@ -16,6 +16,7 @@ echo "Components downloaded in this VHD build (some of the below components migh
 AUDITD_ENABLED=true
 installDeps
 cat << EOF >> ${VHD_LOGS_FILEPATH}
+  - azure-cli
   - apache2-utils
   - apt-transport-https
   - auditd
@@ -203,6 +204,7 @@ MCR_PAUSE_VERSIONS="
 1.2.0
 1.3.1
 1.4.0
+3.2
 "
 for PAUSE_VERSION in ${MCR_PAUSE_VERSIONS}; do
     CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/pause:${PAUSE_VERSION}"
@@ -210,7 +212,10 @@ for PAUSE_VERSION in ${MCR_PAUSE_VERSIONS}; do
     echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
 done
 
+# https://github.com/kubernetes/kubernetes/blob/v1.18.10/cmd/kubeadm/app/constants/constants.go#L340
+# https://github.com/kubernetes/kubernetes/blob/v1.18.15/cmd/kubeadm/app/constants/constants.go#L343
 CORE_DNS_VERSIONS="
+1.6.7
 1.6.6
 1.6.5
 1.5.0
@@ -219,6 +224,18 @@ CORE_DNS_VERSIONS="
 "
 for CORE_DNS_VERSION in ${CORE_DNS_VERSIONS}; do
     CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/coredns:${CORE_DNS_VERSION}"
+    pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+    echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
+done
+
+# https://github.com/kubernetes/kubernetes/blob/v1.18.10/cmd/kubeadm/app/constants/constants.go#L270
+# https://github.com/kubernetes/kubernetes/blob/v1.18.15/cmd/kubeadm/app/constants/constants.go#L273
+# NOTE: MCR and GCR tags are not an exact match
+ETCD_VERSIONS="
+v3.4.3
+"
+for ETCD_VERSION in ${ETCD_VERSIONS}; do
+    CONTAINER_IMAGE="mcr.microsoft.com/oss/etcd-io:${ETCD_VERSION}"
     pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
     echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
 done

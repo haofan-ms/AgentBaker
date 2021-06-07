@@ -70,6 +70,67 @@ configureSecrets(){
     echo "${ETCD_PEER_CERT}" | base64 --decode > "${ETCD_PEER_CERTIFICATE_PATH}"
 }
 
+customizeK8s() {
+    mkdir -p /etc/kubernetes/pki/etcd
+    cp -p /etc/kubernetes/certs/ca.crt /etc/kubernetes/pki/ca.crt
+    cp -p /etc/kubernetes/pki/sa.key /etc/kubernetes/pki/sa.pub
+    cp -p /etc/kubernetes/pki/ca.crt /etc/kubernetes/pki/front-proxy-ca.crt
+    cp -p /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/front-proxy-ca.key
+    cp -p /etc/kubernetes/pki/ca.crt /etc/kubernetes/pki/etcd/ca.crt
+    cp -p /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/etcd/ca.key
+
+    FIRST_MASTER_NODE=true
+    echo $NODE_NAME | grep -E '*-0$' > /dev/null
+    if [[ "$?" != "0" ]]; then
+        FIRST_MASTER_NODE=false
+    fi
+    if [[ -d /var/lib/etcddisk/etcd/member/ ]]; then
+        FIRST_MASTER_NODE=false
+    fi
+
+    if [ "${FIRST_MASTER_NODE}" = true ]; then
+        retrycmd_if_failure 150 10 300 kubeadm init phase certs all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 150 10 300 kubeadm init phase kubeconfig all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 150 10 300 kubeadm init phase control-plane all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
+        retrycmd_if_failure 150 10 300 kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --skip-phases=control-plane,certs,kubeconfig --ignore-preflight-errors=all  -v 9
+
+        cat << EOF | retrycmd_if_failure 5 10 30 kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nodegroup
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:nodes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:node
+EOF
+
+        retrycmd_if_failure_no_stats 5 10 30 kubectl get deploy coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml
+        retrycmd_if_failure_no_stats 5 10 30 kubectl get service coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/service.yaml
+        retrycmd_if_failure_no_stats 5 10 30 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+
+        for ADDON in https://jadarsiearchive.blob.core.windows.net/pub/ip-masq-agent-azure.yaml https://jiaxsongarchive.blob.core.windows.net/pub/kube-state-metrics.yaml https://jiaxsongarchive.blob.core.windows.net/pub/coredns-custom-configmap.yaml https://jiaxsongarchive.blob.core.windows.net/pub/azuredisk-csi-driver-deployment.yaml https://jiaxsongarchive.blob.core.windows.net/pub/storage-classes.yaml https://jiaxsongarchive.blob.core.windows.net/pub/kube-metrics-server.yaml; do
+            retrycmd_if_failure 5 10 30 kubectl apply -f ${ADDON} --kubeconfig /etc/kubernetes/admin.conf
+        done
+    else
+        retrycmd_if_failure 150 10 300 kubeadm join phase control-plane-prepare all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
+        retrycmd_if_failure 150 10 300 kubeadm join phase kubelet-start --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 150 10 300 kubeadm join phase control-plane-join all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+    fi
+
+    # TODO ASH Delete
+    mkdir -p /home/${ADMINUSER}/.kube
+    cp /etc/kubernetes/admin.conf /home/${ADMINUSER}/.kube/config
+    chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube
+    chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube/config
+}
+
 ensureRPC() {
     systemctlEnableAndStart rpcbind || exit $ERR_SYSTEMCTL_START_FAIL
     systemctlEnableAndStart rpc-statd || exit $ERR_SYSTEMCTL_START_FAIL
@@ -248,6 +309,9 @@ configureCNI() {
     echo -n "br_netfilter" > /etc/modules-load.d/br_netfilter.conf
     configureCNIIPTables
     
+}
+
+customizeCNI() {
 }
 
 configureCNIIPTables() {

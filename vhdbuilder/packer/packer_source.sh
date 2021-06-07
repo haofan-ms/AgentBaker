@@ -57,6 +57,8 @@ copyPackerFiles() {
   NVIDIA_DOCKER_DAEMON_DEST=/etc/systemd/system/nvidia-docker-daemon.json
   NVIDIA_DEVICE_PLUGIN_SERVICE_SRC=/home/packer/nvidia-device-plugin.service
   NVIDIA_DEVICE_PLUGIN_SERVICE_DEST=/etc/systemd/system/nvidia-device-plugin.service
+  AUDIT_POLICY_SRC=/home/packer/audit-policy.yaml
+  AUDIT_POLICY_DEST=/etc/kubernetes/audit/audit-policy.yaml
   NOTICE_SRC=/home/packer/NOTICE.txt
   NOTICE_DEST=/NOTICE.txt
   if [[ ${UBUNTU_RELEASE} == "16.04" ]]; then
@@ -95,6 +97,7 @@ copyPackerFiles() {
     fi
   fi
 
+  cpAndMode $AUDIT_POLICY_SRC $AUDIT_POLICY_DEST 600
   cpAndMode $NOTICE_SRC $NOTICE_DEST 444
 }
 

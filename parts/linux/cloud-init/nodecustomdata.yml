@@ -213,6 +213,9 @@ write_files:
   owner: root
   content: |
     {
+      "exec-opts": [
+        "native.cgroupdriver={{CGroupDriver}}"
+      ],
       "live-restore": true,
       "log-driver": "json-file",
       "log-opts":  {
@@ -606,6 +609,79 @@ write_files:
 {{- end}}
 {{- end}}
     #EOF
+
+{{if IsControlPlane}}
+- path: /etc/kubernetes/kubeadm-config.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "kubeadmconfig"}}
+
+- path: /etc/kubernetes/pki/ca.key
+  permissions: "0600"
+  encoding: base64
+  owner: root
+  content: |
+    {{GetParameter "caPrivateKey"}}
+
+- path: /etc/kubernetes/pki/sa.key
+  permissions: "0600"
+  encoding: base64
+  owner: root
+  content: |
+    {{GetParameter "apiServerPrivateKey"}}
+
+- path: /etc/kubernetes/audit/audit-policy.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "auditpolicy"}}
+
+- path: /etc/kubernetes/kustomize/coredns/kustomization.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednskustomization"}}
+
+- path: /etc/kubernetes/kustomize/coredns/cluster-ip.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednsclusterip"}}
+
+- path: /etc/kubernetes/kustomize/coredns/tolerations.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednstolerations"}}
+
+disk_setup:
+  /dev/disk/azure/scsi1/lun0:
+    table_type: gpt
+    layout: true
+    overwrite: false
+
+fs_setup:
+- label: etcd_disk
+  filesystem: ext4
+  device: /dev/disk/azure/scsi1/lun0
+  extra_opts:
+  - -E
+  - lazy_itable_init=1,lazy_journal_init=1
+- label: ephemeral0
+  filesystem: ext4
+  device: ephemeral0.1
+  replace_fs: ntfs
+
+mounts:
+- - LABEL=etcd_disk
+  - /var/lib/etcddisk
+{{end}}
 
 runcmd:
 - set -x

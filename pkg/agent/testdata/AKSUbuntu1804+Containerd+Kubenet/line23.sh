@@ -100,7 +100,7 @@ createKubeManifestDir
 configureK8s
 
 configureCNI
-configureAzureStackInterfaces
+customizeCNI
 
 
 ensureContainerd 
@@ -127,11 +127,11 @@ fi
 
 VALIDATION_ERR=0
 
-API_SERVER_DNS_RETRIES=20
+API_SERVER_DNS_RETRIES=360
 if [[ $API_SERVER_NAME == *.privatelink.* ]]; then
   API_SERVER_DNS_RETRIES=200
 fi
-RES=$(retrycmd_if_failure ${API_SERVER_DNS_RETRIES} 1 3 nslookup ${API_SERVER_NAME})
+RES=$(retrycmd_if_failure ${API_SERVER_DNS_RETRIES} 10 3 nslookup ${API_SERVER_NAME})
 STS=$?
 if [[ $STS != 0 ]]; then
     if [[ $RES == *"168.63.129.16"*  ]]; then
@@ -140,11 +140,11 @@ if [[ $STS != 0 ]]; then
         VALIDATION_ERR=$ERR_K8S_API_SERVER_DNS_LOOKUP_FAIL
     fi
 else
-    API_SERVER_CONN_RETRIES=50
+    API_SERVER_CONN_RETRIES=360
     if [[ $API_SERVER_NAME == *.privatelink.* ]]; then
         API_SERVER_CONN_RETRIES=100
     fi
-    retrycmd_if_failure ${API_SERVER_CONN_RETRIES} 1 3 nc -vz ${API_SERVER_NAME} 443 || VALIDATION_ERR=$ERR_K8S_API_SERVER_CONN_FAIL
+    retrycmd_if_failure ${API_SERVER_CONN_RETRIES} 10 3 nc -vz ${API_SERVER_NAME} 443 || VALIDATION_ERR=$ERR_K8S_API_SERVER_CONN_FAIL
 fi
 
 if $REBOOTREQUIRED; then

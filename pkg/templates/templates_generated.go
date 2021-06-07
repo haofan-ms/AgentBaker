@@ -1,11 +1,15 @@
 // Code generated for package templates by go-bindata DO NOT EDIT. (@generated)
 // sources:
 // linux/cloud-init/artifacts/apt-preferences
+// linux/cloud-init/artifacts/audit-policy.yaml
 // linux/cloud-init/artifacts/auditd-rules
 // linux/cloud-init/artifacts/cis.sh
 // linux/cloud-init/artifacts/containerd-monitor.service
 // linux/cloud-init/artifacts/containerd-monitor.timer
 // linux/cloud-init/artifacts/containerd.service
+// linux/cloud-init/artifacts/coredns-cluster-ip.yaml
+// linux/cloud-init/artifacts/coredns-kustomization.yaml
+// linux/cloud-init/artifacts/coredns-tolerations.yaml
 // linux/cloud-init/artifacts/cse_cmd.sh
 // linux/cloud-init/artifacts/cse_config.sh
 // linux/cloud-init/artifacts/cse_helpers.sh
@@ -23,6 +27,7 @@
 // linux/cloud-init/artifacts/health-monitor.sh
 // linux/cloud-init/artifacts/init-aks-custom-cloud.sh
 // linux/cloud-init/artifacts/kms.service
+// linux/cloud-init/artifacts/kubeadm-config.yaml
 // linux/cloud-init/artifacts/kubelet-monitor.service
 // linux/cloud-init/artifacts/kubelet-monitor.timer
 // linux/cloud-init/artifacts/kubelet.service
@@ -125,6 +130,183 @@ func linuxCloudInitArtifactsAptPreferences() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "linux/cloud-init/artifacts/apt-preferences", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _linuxCloudInitArtifactsAuditPolicyYaml = []byte(`---
+apiVersion: audit.k8s.io/v1beta1
+kind: Policy
+rules:
+  # audit level 'None' for low-risk requests
+  - level: None
+    users: ["system:kube-proxy"]
+    verbs: ["watch"]
+    resources:
+      - group: ""
+        resources: ["endpoints", "services", "services/status"]
+  # audit level 'None' for low-risk requests
+  - level: None
+    users: ["kubelet"] # legacy kubelet identity
+    verbs: ["get"]
+    resources:
+      - group: ""
+        resources: ["nodes", "nodes/status"]
+  # audit level 'None' for low-risk requests
+  - level: None
+    userGroups: ["system:nodes"]
+    verbs: ["get"]
+    resources:
+      - group: ""
+        resources: ["nodes", "nodes/status"]
+  # audit level 'None' for low-risk requests
+  - level: None
+    users:
+      - aksService # the default user/cert used by aks in master node
+      - system:serviceaccount:kube-system:endpoint-controller
+    verbs: ["get", "update"]
+    namespaces: ["kube-system"]
+    resources:
+      - group: ""
+        resources: ["endpoints"]
+  # audit level 'None' for low-risk requests
+  - level: None
+    users: ["system:apiserver"]
+    verbs: ["get"]
+    resources:
+      - group: ""
+        resources: ["namespaces", "namespaces/status", "namespaces/finalize"]
+  # audit level 'None' for low-risk requests
+  - level: None
+    users:
+      - aksService # the default user/cert used by aks in master node
+    verbs: ["get", "list"]
+    resources:
+      - group: "metrics.k8s.io"
+  # Don't log these read-only URLs.
+  - level: None
+    nonResourceURLs:
+      - /healthz*
+      - /version
+      - /swagger*
+  # Monitoring of delete actions to detect security relevant activities.
+  - level: Metadata
+    verbs: ["delete"]
+    resources:
+      - group: ""
+        resources: ["events"]
+  # Don't log other events requests.
+  - level: None
+    resources:
+      - group: ""
+        resources: ["events"]
+  # node and pod status calls from nodes are high-volume and can be large, don't log responses for expected updates from nodes
+  - level: Request
+    users: ["client", "kubelet", "system:node-problem-detector", "system:serviceaccount:kube-system:node-problem-detector", "system:serviceaccount:kube-system:aci-connector-linux"]
+    verbs: ["update","patch"]
+    resources:
+      - group: ""
+        resources: ["nodes/status", "pods/status"]
+    omitStages:
+      - "RequestReceived"
+  # node and pod status calls from nodes are high-volume and can be large, don't log responses for expected updates from nodes
+  - level: Request
+    userGroups: ["system:nodes"]
+    verbs: ["update","patch"]
+    resources:
+      - group: ""
+        resources: ["nodes/status", "pods/status"]
+    omitStages:
+      - "RequestReceived"
+  # deletecollection calls can be large, don't log responses for expected namespace deletions
+  - level: Request
+    users: ["system:serviceaccount:kube-system:namespace-controller"]
+    verbs: ["deletecollection"]
+    omitStages:
+      - "RequestReceived"
+  # overriding the default behavior of coredns might have security threats for Kubernetes DNS in security perspective, set the level as RequestResponse
+  - level: RequestResponse
+    verbs: ["update","patch"]
+    resources:
+      - group: ""
+        resources: ["configmaps"]
+        resourceNames: ["coredns-custom"]
+    namespaces: ["kube-system"]
+    omitStages:
+      - "RequestReceived"
+  # Secrets, ConfigMaps, ServiceAccounts and TokenReviews can contain sensitive & binary data,
+  # so only log at the Metadata level.
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["secrets", "configmaps", "serviceaccounts"]
+      - group: authentication.k8s.io
+        resources: ["tokenreviews"]
+    omitStages:
+      - "RequestReceived"
+  # Get repsonses can be large; don't log response
+  - level: Request
+    verbs: ["get", "list", "watch"]
+    resources:
+      - group: ""
+      - group: "admissionregistration.k8s.io"
+      - group: "apiextensions.k8s.io"
+      - group: "apiregistration.k8s.io"
+      - group: "apps"
+      - group: "authentication.k8s.io"
+      - group: "authorization.k8s.io"
+      - group: "autoscaling"
+      - group: "batch"
+      - group: "certificates.k8s.io"
+      - group: "extensions"
+      - group: "metrics.k8s.io"
+      - group: "networking.k8s.io"
+      - group: "policy"
+      - group: "rbac.authorization.k8s.io"
+      - group: "scheduling.k8s.io"
+      - group: "settings.k8s.io"
+      - group: "storage.k8s.io"
+    omitStages:
+      - "RequestReceived"
+  # Default level for known APIs
+  - level: RequestResponse
+    resources:
+      - group: ""
+      - group: "admissionregistration.k8s.io"
+      - group: "apiextensions.k8s.io"
+      - group: "apiregistration.k8s.io"
+      - group: "apps"
+      - group: "authentication.k8s.io"
+      - group: "authorization.k8s.io"
+      - group: "autoscaling"
+      - group: "batch"
+      - group: "certificates.k8s.io"
+      - group: "extensions"
+      - group: "metrics.k8s.io"
+      - group: "networking.k8s.io"
+      - group: "policy"
+      - group: "rbac.authorization.k8s.io"
+      - group: "scheduling.k8s.io"
+      - group: "settings.k8s.io"
+      - group: "storage.k8s.io"
+    omitStages:
+      - "RequestReceived"
+  # Default level for all other requests.
+  - level: Metadata
+    omitStages:
+      - "RequestReceived"`)
+
+func linuxCloudInitArtifactsAuditPolicyYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsAuditPolicyYaml, nil
+}
+
+func linuxCloudInitArtifactsAuditPolicyYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsAuditPolicyYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/audit-policy.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -423,6 +605,88 @@ func linuxCloudInitArtifactsContainerdService() (*asset, error) {
 	return a, nil
 }
 
+var _linuxCloudInitArtifactsCorednsClusterIpYaml = []byte(`apiVersion: v1
+kind: Service
+metadata:
+  name: kube-dns
+  namespace: kube-system
+spec:
+  clusterIP: {{DNSServiceIP}}
+`)
+
+func linuxCloudInitArtifactsCorednsClusterIpYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsCorednsClusterIpYaml, nil
+}
+
+func linuxCloudInitArtifactsCorednsClusterIpYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsCorednsClusterIpYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/coredns-cluster-ip.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _linuxCloudInitArtifactsCorednsKustomizationYaml = []byte(`---
+resources:
+- deployment.yaml
+- service.yaml
+patchesStrategicMerge:
+- cluster-ip.yaml
+patchesJson6902:
+- path: tolerations.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: coredns
+    namespace: kube-system
+`)
+
+func linuxCloudInitArtifactsCorednsKustomizationYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsCorednsKustomizationYaml, nil
+}
+
+func linuxCloudInitArtifactsCorednsKustomizationYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsCorednsKustomizationYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/coredns-kustomization.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _linuxCloudInitArtifactsCorednsTolerationsYaml = []byte(`- op: add
+  path: "/spec/template/spec/tolerations/-"
+  value:
+    operator: "Exists"
+    effect: NoSchedule
+- op: add
+  path: "/spec/template/spec/tolerations/-"
+  value:
+    operator: "Exists"
+    effect: NoExecute
+`)
+
+func linuxCloudInitArtifactsCorednsTolerationsYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsCorednsTolerationsYaml, nil
+}
+
+func linuxCloudInitArtifactsCorednsTolerationsYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsCorednsTolerationsYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/coredns-tolerations.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _linuxCloudInitArtifactsCse_cmdSh = []byte(`echo $(date),$(hostname) > /var/log/azure/cluster-provision-cse-output.log;
 {{GetVariable "outBoundCmd"}}
 for i in $(seq 1 1200); do
@@ -580,6 +844,67 @@ configureSecrets(){
     echo "${ETCD_SERVER_CERTIFICATE}" | base64 --decode > "${ETCD_SERVER_CERTIFICATE_PATH}"
     echo "${ETCD_CLIENT_CERTIFICATE}" | base64 --decode > "${ETCD_CLIENT_CERTIFICATE_PATH}"
     echo "${ETCD_PEER_CERT}" | base64 --decode > "${ETCD_PEER_CERTIFICATE_PATH}"
+}
+
+customizeK8s() {
+    mkdir -p /etc/kubernetes/pki/etcd
+    cp -p /etc/kubernetes/certs/ca.crt /etc/kubernetes/pki/ca.crt
+    cp -p /etc/kubernetes/pki/sa.key /etc/kubernetes/pki/sa.pub
+    cp -p /etc/kubernetes/pki/ca.crt /etc/kubernetes/pki/front-proxy-ca.crt
+    cp -p /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/front-proxy-ca.key
+    cp -p /etc/kubernetes/pki/ca.crt /etc/kubernetes/pki/etcd/ca.crt
+    cp -p /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/etcd/ca.key
+
+    FIRST_MASTER_NODE=true
+    echo $NODE_NAME | grep -E '*-0$' > /dev/null
+    if [[ "$?" != "0" ]]; then
+        FIRST_MASTER_NODE=false
+    fi
+    if [[ -d /var/lib/etcddisk/etcd/member/ ]]; then
+        FIRST_MASTER_NODE=false
+    fi
+
+    if [ "${FIRST_MASTER_NODE}" = true ]; then
+        retrycmd_if_failure 150 10 300 kubeadm init phase certs all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 150 10 300 kubeadm init phase kubeconfig all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 150 10 300 kubeadm init phase control-plane all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
+        retrycmd_if_failure 150 10 300 kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --skip-phases=control-plane,certs,kubeconfig --ignore-preflight-errors=all  -v 9
+
+        cat << EOF | retrycmd_if_failure 5 10 30 kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nodegroup
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:nodes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:node
+EOF
+
+        retrycmd_if_failure_no_stats 5 10 30 kubectl get deploy coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml
+        retrycmd_if_failure_no_stats 5 10 30 kubectl get service coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/service.yaml
+        retrycmd_if_failure_no_stats 5 10 30 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+
+        for ADDON in {{GetAddonsURI}}; do
+            retrycmd_if_failure 5 10 30 kubectl apply -f ${ADDON} --kubeconfig /etc/kubernetes/admin.conf
+        done
+    else
+        retrycmd_if_failure 150 10 300 kubeadm join phase control-plane-prepare all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
+        retrycmd_if_failure 150 10 300 kubeadm join phase kubelet-start --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 150 10 300 kubeadm join phase control-plane-join all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+    fi
+
+    # TODO ASH Delete
+    mkdir -p /home/${ADMINUSER}/.kube
+    cp /etc/kubernetes/admin.conf /home/${ADMINUSER}/.kube/config
+    chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube
+    chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube/config
 }
 
 {{- if EnableHostsConfigAgent}}
@@ -787,6 +1112,17 @@ configureCNI() {
     {{end}}
 }
 
+customizeCNI() {
+    {{- if IsAzureStackCloud}}
+    if [[ "${NETWORK_PLUGIN}" = "azure" ]]; then
+        generateIPAMFileSource
+        local temp=$(mktemp)
+        cp $CNI_CONFIG_DIR/10-azure.conflist ${temp}
+        jq '.plugins[0].ipam.environment = "mas"' ${temp} > $CNI_CONFIG_DIR/10-azure.conflist
+    fi
+    {{end}}
+}
+
 configureCNIIPTables() {
     if [[ "${NETWORK_PLUGIN}" = "azure" ]]; then
         jq '.plugins[0].ipam.environment = "mas"' $CNI_BIN_DIR/10-azure.conflist > $CNI_CONFIG_DIR/10-azure.conflist
@@ -800,6 +1136,80 @@ configureCNIIPTables() {
         /sbin/ebtables -t nat --list
     fi
 }
+
+{{- if IsAzureStackCloud}}
+generateIPAMFileSource() {
+    NETWORK_INTERFACES_FILE="/etc/kubernetes/network_interfaces.json"
+    AZURE_CNI_CONFIG_FILE="/etc/kubernetes/interfaces.json"
+    AZURESTACK_ENVIRONMENT_JSON_PATH="/etc/kubernetes/azurestackcloud.json"
+    AZURE_JSON_PATH="/etc/kubernetes/azure.json"
+    NETWORK_API_VERSION="2018-08-01"
+
+    SERVICE_MANAGEMENT_ENDPOINT=$(jq -r '.serviceManagementEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
+    ACTIVE_DIRECTORY_ENDPOINT=$(jq -r '.activeDirectoryEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
+    RESOURCE_MANAGER_ENDPOINT=$(jq -r '.resourceManagerEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH})
+    TENANT_ID=$(jq -r '.tenantId' ${AZURE_JSON_PATH})
+    TOKEN_URL=$(echo ${ACTIVE_DIRECTORY_ENDPOINT}${TENANT_ID}/oauth2/token)
+
+    set +x
+    TOKEN=$(curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "grant_type=client_credentials" \
+        -d "client_id=${SERVICE_PRINCIPAL_CLIENT_ID}" \
+        --data-urlencode "client_secret=${SERVICE_PRINCIPAL_CLIENT_SECRET}" \
+        --data-urlencode "resource=${SERVICE_MANAGEMENT_ENDPOINT}" \
+        ${TOKEN_URL} | jq '.access_token' | xargs)
+
+    if [[ -z ${TOKEN} ]]; then
+        echo "Error generating token for Azure Resource Manager"
+        exit 120
+    fi
+
+    curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X GET \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Content-Type: application/json" \
+        "${RESOURCE_MANAGER_ENDPOINT}subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Network/networkInterfaces?api-version=${NETWORK_API_VERSION}" > ${NETWORK_INTERFACES_FILE}
+    set -x
+
+    if [[ ! -s ${NETWORK_INTERFACES_FILE} ]]; then
+        echo "Error fetching network interface configuration for node"
+        exit 121
+    fi
+
+    echo "Generating Azure CNI interface file"
+
+    mapfile -t local_interfaces < <(cat /sys/class/net/*/address | tr -d : | sed 's/.*/\U&/g')
+
+    SDN_INTERFACES=$(jq ".value | map(select(.properties != null) | select(.properties.macAddress != null) | select(.properties.macAddress | inside(\"${local_interfaces[*]}\"))) | map(select((.properties.ipConfigurations | length) > 0))" ${NETWORK_INTERFACES_FILE})
+
+    if [[ -z ${SDN_INTERFACES} ]]; then
+        echo "Error extracting the SDN interfaces from the network interfaces file"
+        exit 123
+    fi
+
+    AZURE_CNI_CONFIG=$(echo ${SDN_INTERFACES} | jq "{Interfaces: [.[] | {MacAddress: .properties.macAddress, IsPrimary: .properties.primary, IPSubnets: [{Prefix: .properties.ipConfigurations[0].properties.subnet.id, IPAddresses: .properties.ipConfigurations | [.[] | {Address: .properties.privateIPAddress, IsPrimary: .properties.primary}]}]}]}")
+
+    mapfile -t SUBNET_IDS < <(echo ${SDN_INTERFACES} | jq '[.[].properties.ipConfigurations[0].properties.subnet.id] | unique | .[]' -r)
+
+    for SUBNET_ID in "${SUBNET_IDS[@]}"; do
+        SUBNET_PREFIX=$(curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X GET \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${RESOURCE_MANAGER_ENDPOINT}${SUBNET_ID:1}?api-version=${NETWORK_API_VERSION}" |
+            jq '.properties.addressPrefix' -r)
+
+        if [[ -z ${SUBNET_PREFIX} ]]; then
+            echo "Error fetching the subnet address prefix for a subnet ID"
+            exit 122
+        fi
+
+        AZURE_CNI_CONFIG=$(echo ${AZURE_CNI_CONFIG} | sed "s|${SUBNET_ID}|${SUBNET_PREFIX}|g")
+    done
+
+    echo ${AZURE_CNI_CONFIG} > ${AZURE_CNI_CONFIG_FILE}
+    chmod 0444 ${AZURE_CNI_CONFIG_FILE}
+}
+{{end}}
 
 disable1804SystemdResolved() {
     ls -ltr /etc/resolv.conf
@@ -2148,7 +2558,7 @@ wait_for_file 3600 1 {{GetCustomSearchDomainsCSEScriptFilepath}} || exit $ERR_FI
 configureK8s
 
 configureCNI
-configureAzureStackInterfaces
+customizeCNI
 
 {{/* configure and enable dhcpv6 for dual stack feature */}}
 {{- if IsIPv6DualStackFeatureEnabled}}
@@ -2177,6 +2587,9 @@ configureSwapFile
 
 ensureSysctl
 ensureKubelet
+{{- if IsControlPlane}}
+customizeK8s
+{{end}}
 ensureJournal
 ensureUpdateNodeLabels
 
@@ -2197,12 +2610,12 @@ fi
 
 VALIDATION_ERR=0
 
-API_SERVER_DNS_RETRIES=20
+API_SERVER_DNS_RETRIES=360
 if [[ $API_SERVER_NAME == *.privatelink.* ]]; then
   API_SERVER_DNS_RETRIES=200
 fi
 {{- if not EnableHostsConfigAgent}}
-RES=$(retrycmd_if_failure ${API_SERVER_DNS_RETRIES} 1 3 nslookup ${API_SERVER_NAME})
+RES=$(retrycmd_if_failure ${API_SERVER_DNS_RETRIES} 10 3 nslookup ${API_SERVER_NAME})
 STS=$?
 {{- else}}
 STS=0
@@ -2214,11 +2627,11 @@ if [[ $STS != 0 ]]; then
         VALIDATION_ERR=$ERR_K8S_API_SERVER_DNS_LOOKUP_FAIL
     fi
 else
-    API_SERVER_CONN_RETRIES=50
+    API_SERVER_CONN_RETRIES=360
     if [[ $API_SERVER_NAME == *.privatelink.* ]]; then
         API_SERVER_CONN_RETRIES=100
     fi
-    retrycmd_if_failure ${API_SERVER_CONN_RETRIES} 1 3 nc -vz ${API_SERVER_NAME} 443 || VALIDATION_ERR=$ERR_K8S_API_SERVER_CONN_FAIL
+    retrycmd_if_failure ${API_SERVER_CONN_RETRIES} 10 3 nc -vz ${API_SERVER_NAME} 443 || VALIDATION_ERR=$ERR_K8S_API_SERVER_CONN_FAIL
 fi
 
 if $REBOOTREQUIRED; then
@@ -2611,6 +3024,14 @@ func linuxCloudInitArtifactsHealthMonitorSh() (*asset, error) {
 }
 
 var _linuxCloudInitArtifactsInitAksCustomCloudSh = []byte(`#!/bin/bash
+
+{{- if IsAzureStackCloud}}
+# trust AzureStack root ca
+cp /var/lib/waagent/Certificates.pem /usr/local/share/ca-certificates/azsCertificate.crt
+/usr/sbin/update-ca-certificates
+exit
+{{end}}
+
 mkdir -p /root/AzureCACertificates
 # http://168.63.129.16 is a constant for the host's wireserver endpoint
 # certs=$(curl "http://168.63.129.16/machine?comp=acmspackage&type=cacertificates&ext=json")
@@ -2758,6 +3179,135 @@ func linuxCloudInitArtifactsKmsService() (*asset, error) {
 	return a, nil
 }
 
+var _linuxCloudInitArtifactsKubeadmConfigYaml = []byte(`---
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: ClusterConfiguration
+etcd:
+  local:
+    imageRepository: mcr.microsoft.com/oss/etcd-io
+    imageTag: {{EtcdVersion}}
+    dataDir: /var/lib/etcddisk/etcd
+networking:
+  podSubnet: {{PodCIDR}}
+  serviceSubnet: {{ServiceCidr}}
+kubernetesVersion: v{{KubernetesVersion}}-azs
+controlPlaneEndpoint: {{GetKubernetesEndpoint}}
+apiServer:
+  extraArgs:
+    cloud-config: /etc/kubernetes/azure.json
+    cloud-provider: azure
+    audit-log-path: /var/log/kubeaudit/audit.log
+    audit-policy-file: /etc/kubernetes/audit/audit-policy.yaml
+    audit-log-maxage: "30"
+    audit-log-maxbackup: "10"
+    audit-log-maxsize: "100"
+  extraVolumes:
+  - hostPath: /etc/kubernetes/azure.json
+    mountPath: /etc/kubernetes/azure.json
+    name: cloud-config
+    readOnly: true
+  - hostPath: /etc/kubernetes/audit/audit-policy.yaml
+    mountPath: /etc/kubernetes/audit/audit-policy.yaml
+    name: audit-policy-file
+    readOnly: true
+  - hostPath: /var/log/kubeaudit
+    mountPath: /var/log/kubeaudit
+    name: auditlog
+    readOnly: false
+  certSANs:
+  - 127.0.0.1
+  - localhost
+  timeoutForControlPlane: 7m0s
+controllerManager:
+  extraArgs:
+    allocate-node-cidrs: "{{IsKubenet}}"
+    configure-cloud-routes: "{{IsKubenet}}"
+    cloud-config: /etc/kubernetes/azure.json
+    cloud-provider: azure
+    cluster-name: {{ResourceGroupName}}
+  extraVolumes:
+  - hostPath: /etc/kubernetes/azure.json
+    mountPath: /etc/kubernetes/azure.json
+    name: cloud-config
+    readOnly: true
+  - hostPath: /etc/kubernetes/{{GetTargetEnvironment}}.json
+    mountPath: /etc/kubernetes/{{GetTargetEnvironment}}.json
+    name: cloud-config-stack
+    readOnly: true
+dns:
+  type: CoreDNS
+imageRepository: mcr.microsoft.com/oss/kubernetes
+clusterName: {{ResourceGroupName}}
+---
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: InitConfiguration
+bootstrapTokens:
+- token: {{BootstrapToken}}
+  ttl: 24h
+  usages:
+  - authentication
+  - signing
+  groups:
+  - system:bootstrappers:kubeadm:default-node-token
+nodeRegistration:
+  taints:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+    value: "true"
+  kubeletExtraArgs:
+    cloud-config: /etc/kubernetes/azure.json
+    cloud-provider: azure
+    node-labels: {{GetCPKubernetesLabels}}
+    network-plugin: {{NetworkPluging}}
+    non-masquerade-cidr: {{NonMasqueradeCIDR}}
+    cgroup-driver: "{{CGroupDriver}}"
+localAPIEndpoint:
+  advertiseAddress: ""
+  bindPort: 443
+---
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: JoinConfiguration
+nodeRegistration:
+  taints:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+    value: "true"
+  kubeletExtraArgs:
+    cloud-config: /etc/kubernetes/azure.json
+    cloud-provider: azure
+    node-labels: {{GetCPKubernetesLabels}}
+    network-plugin: {{NetworkPluging}}
+    non-masquerade-cidr: {{NonMasqueradeCIDR}}
+    cgroup-driver: "{{CGroupDriver}}"
+discovery:
+  bootstrapToken:
+    token: {{BootstrapToken}}
+    apiServerEndpoint: {{GetKubernetesEndpoint}}:443
+    caCertHashes:
+    - {{CACertificateHash}}
+  timeout: 5m
+controlPlane:
+  localAPIEndpoint:
+    advertiseAddress: ""
+    bindPort: 443
+#EOF
+`)
+
+func linuxCloudInitArtifactsKubeadmConfigYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsKubeadmConfigYaml, nil
+}
+
+func linuxCloudInitArtifactsKubeadmConfigYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsKubeadmConfigYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/kubeadm-config.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _linuxCloudInitArtifactsKubeletMonitorService = []byte(`[Unit]
 Description=a script that checks kubelet health and restarts if needed
 After=kubelet.service
@@ -2813,6 +3363,7 @@ Requires=kms.service
 
 [Service]
 Restart=always
+EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
 EnvironmentFile=/etc/default/kubelet
 SuccessExitStatus=143
 ExecStartPre=/bin/bash /opt/azure/containers/kubelet.sh
@@ -2825,6 +3376,7 @@ ExecStartPre=-/sbin/ebtables -t nat --list
 ExecStartPre=-/sbin/iptables -t nat --numeric --list
 
 ExecStart=/usr/local/bin/kubelet \
+        $KUBELET_KUBEADM_ARGS \
         --enable-server \
         --node-labels="${KUBELET_NODE_LABELS}" \
         --v=2 {{if NeedsContainerd}}--container-runtime=remote --runtime-request-timeout=15m --container-runtime-endpoint=unix:///run/containerd/containerd.sock{{end}} \
@@ -3659,7 +4211,12 @@ NODE_NAME=$(echo $(hostname) | tr "[:upper:]" "[:lower:]")
 
 echo "updating labels for ${NODE_NAME}"
 
-FORMATTED_CURRENT_NODE_LABELS=$(kubectl label --kubeconfig /var/lib/kubelet/kubeconfig --list=true node $NODE_NAME | sort)
+local KUBECONFIG=/var/lib/kubelet/kubeconfig
+{{if not NeedsTLSBoostraping}}
+KUBECONFIG=/etc/kubernetes/kubelet.conf
+{{end}}
+
+FORMATTED_CURRENT_NODE_LABELS=$(kubectl label --kubeconfig ${KUBECONFIG} --list=true node $NODE_NAME | sort)
 
 echo "current node labels (sorted): ${FORMATTED_CURRENT_NODE_LABELS}"
 
@@ -3672,7 +4229,7 @@ MISSING_LABELS=$(comm -32 <(echo $FORMATTED_NODE_LABELS_TO_UPDATE | tr ' ' '\n')
 echo "missing labels: ${MISSING_LABELS}"
 
 if [ ! -z "$MISSING_LABELS" ]; then
-  kubectl label --kubeconfig /var/lib/kubelet/kubeconfig --overwrite node $NODE_NAME $MISSING_LABELS
+  kubectl label --kubeconfig ${KUBECONFIG} --overwrite node $NODE_NAME $MISSING_LABELS
 fi
 #EOF
 `)
@@ -3907,6 +4464,9 @@ write_files:
   owner: root
   content: |
     {
+      "exec-opts": [
+        "native.cgroupdriver={{CGroupDriver}}"
+      ],
       "live-restore": true,
       "log-driver": "json-file",
       "log-opts":  {
@@ -4300,6 +4860,79 @@ write_files:
 {{- end}}
 {{- end}}
     #EOF
+
+{{if IsControlPlane}}
+- path: /etc/kubernetes/kubeadm-config.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "kubeadmconfig"}}
+
+- path: /etc/kubernetes/pki/ca.key
+  permissions: "0600"
+  encoding: base64
+  owner: root
+  content: |
+    {{GetParameter "caPrivateKey"}}
+
+- path: /etc/kubernetes/pki/sa.key
+  permissions: "0600"
+  encoding: base64
+  owner: root
+  content: |
+    {{GetParameter "apiServerPrivateKey"}}
+
+- path: /etc/kubernetes/audit/audit-policy.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "auditpolicy"}}
+
+- path: /etc/kubernetes/kustomize/coredns/kustomization.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednskustomization"}}
+
+- path: /etc/kubernetes/kustomize/coredns/cluster-ip.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednsclusterip"}}
+
+- path: /etc/kubernetes/kustomize/coredns/tolerations.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "corednstolerations"}}
+
+disk_setup:
+  /dev/disk/azure/scsi1/lun0:
+    table_type: gpt
+    layout: true
+    overwrite: false
+
+fs_setup:
+- label: etcd_disk
+  filesystem: ext4
+  device: /dev/disk/azure/scsi1/lun0
+  extra_opts:
+  - -E
+  - lazy_itable_init=1,lazy_journal_init=1
+- label: ephemeral0
+  filesystem: ext4
+  device: ephemeral0.1
+  replace_fs: ntfs
+
+mounts:
+- - LABEL=etcd_disk
+  - /var/lib/etcddisk
+{{end}}
 
 runcmd:
 - set -x
@@ -6933,11 +7566,15 @@ func AssetNames() []string {
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
 	"linux/cloud-init/artifacts/apt-preferences":                           linuxCloudInitArtifactsAptPreferences,
+	"linux/cloud-init/artifacts/audit-policy.yaml":                         linuxCloudInitArtifactsAuditPolicyYaml,
 	"linux/cloud-init/artifacts/auditd-rules":                              linuxCloudInitArtifactsAuditdRules,
 	"linux/cloud-init/artifacts/cis.sh":                                    linuxCloudInitArtifactsCisSh,
 	"linux/cloud-init/artifacts/containerd-monitor.service":                linuxCloudInitArtifactsContainerdMonitorService,
 	"linux/cloud-init/artifacts/containerd-monitor.timer":                  linuxCloudInitArtifactsContainerdMonitorTimer,
 	"linux/cloud-init/artifacts/containerd.service":                        linuxCloudInitArtifactsContainerdService,
+	"linux/cloud-init/artifacts/coredns-cluster-ip.yaml":                   linuxCloudInitArtifactsCorednsClusterIpYaml,
+	"linux/cloud-init/artifacts/coredns-kustomization.yaml":                linuxCloudInitArtifactsCorednsKustomizationYaml,
+	"linux/cloud-init/artifacts/coredns-tolerations.yaml":                  linuxCloudInitArtifactsCorednsTolerationsYaml,
 	"linux/cloud-init/artifacts/cse_cmd.sh":                                linuxCloudInitArtifactsCse_cmdSh,
 	"linux/cloud-init/artifacts/cse_config.sh":                             linuxCloudInitArtifactsCse_configSh,
 	"linux/cloud-init/artifacts/cse_helpers.sh":                            linuxCloudInitArtifactsCse_helpersSh,
@@ -6955,6 +7592,7 @@ var _bindata = map[string]func() (*asset, error){
 	"linux/cloud-init/artifacts/health-monitor.sh":                         linuxCloudInitArtifactsHealthMonitorSh,
 	"linux/cloud-init/artifacts/init-aks-custom-cloud.sh":                  linuxCloudInitArtifactsInitAksCustomCloudSh,
 	"linux/cloud-init/artifacts/kms.service":                               linuxCloudInitArtifactsKmsService,
+	"linux/cloud-init/artifacts/kubeadm-config.yaml":                       linuxCloudInitArtifactsKubeadmConfigYaml,
 	"linux/cloud-init/artifacts/kubelet-monitor.service":                   linuxCloudInitArtifactsKubeletMonitorService,
 	"linux/cloud-init/artifacts/kubelet-monitor.timer":                     linuxCloudInitArtifactsKubeletMonitorTimer,
 	"linux/cloud-init/artifacts/kubelet.service":                           linuxCloudInitArtifactsKubeletService,
@@ -7039,11 +7677,15 @@ var _bintree = &bintree{nil, map[string]*bintree{
 		"cloud-init": &bintree{nil, map[string]*bintree{
 			"artifacts": &bintree{nil, map[string]*bintree{
 				"apt-preferences":                           &bintree{linuxCloudInitArtifactsAptPreferences, map[string]*bintree{}},
+				"audit-policy.yaml":                         &bintree{linuxCloudInitArtifactsAuditPolicyYaml, map[string]*bintree{}},
 				"auditd-rules":                              &bintree{linuxCloudInitArtifactsAuditdRules, map[string]*bintree{}},
 				"cis.sh":                                    &bintree{linuxCloudInitArtifactsCisSh, map[string]*bintree{}},
 				"containerd-monitor.service":                &bintree{linuxCloudInitArtifactsContainerdMonitorService, map[string]*bintree{}},
 				"containerd-monitor.timer":                  &bintree{linuxCloudInitArtifactsContainerdMonitorTimer, map[string]*bintree{}},
 				"containerd.service":                        &bintree{linuxCloudInitArtifactsContainerdService, map[string]*bintree{}},
+				"coredns-cluster-ip.yaml":                   &bintree{linuxCloudInitArtifactsCorednsClusterIpYaml, map[string]*bintree{}},
+				"coredns-kustomization.yaml":                &bintree{linuxCloudInitArtifactsCorednsKustomizationYaml, map[string]*bintree{}},
+				"coredns-tolerations.yaml":                  &bintree{linuxCloudInitArtifactsCorednsTolerationsYaml, map[string]*bintree{}},
 				"cse_cmd.sh":                                &bintree{linuxCloudInitArtifactsCse_cmdSh, map[string]*bintree{}},
 				"cse_config.sh":                             &bintree{linuxCloudInitArtifactsCse_configSh, map[string]*bintree{}},
 				"cse_helpers.sh":                            &bintree{linuxCloudInitArtifactsCse_helpersSh, map[string]*bintree{}},
@@ -7061,6 +7703,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 				"health-monitor.sh":                         &bintree{linuxCloudInitArtifactsHealthMonitorSh, map[string]*bintree{}},
 				"init-aks-custom-cloud.sh":                  &bintree{linuxCloudInitArtifactsInitAksCustomCloudSh, map[string]*bintree{}},
 				"kms.service":                               &bintree{linuxCloudInitArtifactsKmsService, map[string]*bintree{}},
+				"kubeadm-config.yaml":                       &bintree{linuxCloudInitArtifactsKubeadmConfigYaml, map[string]*bintree{}},
 				"kubelet-monitor.service":                   &bintree{linuxCloudInitArtifactsKubeletMonitorService, map[string]*bintree{}},
 				"kubelet-monitor.timer":                     &bintree{linuxCloudInitArtifactsKubeletMonitorTimer, map[string]*bintree{}},
 				"kubelet.service":                           &bintree{linuxCloudInitArtifactsKubeletService, map[string]*bintree{}},

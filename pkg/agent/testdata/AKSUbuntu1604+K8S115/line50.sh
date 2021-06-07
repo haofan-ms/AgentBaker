@@ -5,6 +5,7 @@ ConditionPathExists=/usr/local/bin/kubelet
 
 [Service]
 Restart=always
+EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
 EnvironmentFile=/etc/default/kubelet
 SuccessExitStatus=143
 ExecStartPre=/bin/bash /opt/azure/containers/kubelet.sh
@@ -17,6 +18,7 @@ ExecStartPre=-/sbin/ebtables -t nat --list
 ExecStartPre=-/sbin/iptables -t nat --numeric --list
 
 ExecStart=/usr/local/bin/kubelet \
+        $KUBELET_KUBEADM_ARGS \
         --enable-server \
         --node-labels="${KUBELET_NODE_LABELS}" \
         --v=2  \

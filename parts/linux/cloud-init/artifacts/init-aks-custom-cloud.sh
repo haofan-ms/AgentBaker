@@ -1,4 +1,12 @@
 #!/bin/bash
+
+{{- if IsAzureStackCloud}}
+# trust AzureStack root ca
+cp /var/lib/waagent/Certificates.pem /usr/local/share/ca-certificates/azsCertificate.crt
+/usr/sbin/update-ca-certificates
+exit
+{{end}}
+
 mkdir -p /root/AzureCACertificates
 # http://168.63.129.16 is a constant for the host's wireserver endpoint
 # certs=$(curl "http://168.63.129.16/machine?comp=acmspackage&type=cacertificates&ext=json")

@@ -632,12 +632,12 @@ write_files:
   content: |
     {{GetParameter "apiServerPrivateKey"}}
 
-- path: /etc/kubernetes/audit/audit-policy.yaml
+- path: /etc/kubernetes/addons/ip-masq-agent-configmap.yaml
   permissions: "0600"
   encoding: gzip
   owner: root
   content: !!binary |
-    {{GetVariableProperty "cloudInitData" "auditpolicy"}}
+    {{GetVariableProperty "cloudInitData" "ipMasqAgentConfigmap"}}
 
 - path: /etc/kubernetes/kustomize/coredns/kustomization.yaml
   permissions: "0600"

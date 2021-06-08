@@ -30,7 +30,7 @@ func getCustomDataVariables(config *datamodel.NodeBootstrappingConfiguration) pa
 			"updateNodeLabelsSystemdService": getBase64EncodedGzippedCustomScript(updateNodeLabelsSystemdService, config),
 			"updateNodeLabelsScript":         getBase64EncodedGzippedCustomScript(updateNodeLabelsScript, config),
 			"kubeadmconfig":                  getBase64EncodedGzippedCustomScript(kubeadmConfig, config),
-			"auditpolicy":                    getBase64EncodedGzippedCustomScript(auditPolicy, config),
+			"ipMasqAgentConfigmap":           getBase64EncodedGzippedCustomScript(ipMasqAgentConfigmap, config),
 			"corednskustomization":           getBase64EncodedGzippedCustomScript(corednsKustomization, config),
 			"corednsclusterip":               getBase64EncodedGzippedCustomScript(corednsClusterIP, config),
 			"corednstolerations":             getBase64EncodedGzippedCustomScript(corednsTolerations, config),

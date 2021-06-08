@@ -328,17 +328,14 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 		},
 		// TODO ASH DELETE
 		"GetAddonsURI": func() string {
-			addons := []string{}
-			if cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin == NetworkPluginKubenet {
-				addons = append(addons, "https://jadarsiearchive.blob.core.windows.net/pub/ip-masq-agent-kubenet.yaml")
-			} else {
-				addons = append(addons, "https://jadarsiearchive.blob.core.windows.net/pub/ip-masq-agent-azure.yaml")
+			addons := []string{
+				"/etc/kubernetes/addons/azuredisk-csi-driver.yaml",
+				"/etc/kubernetes/addons/coredns-custom-configmap.yaml",
+				"/etc/kubernetes/addons/ip-masq-agent.yaml",
+				"/etc/kubernetes/addons/ip-masq-agent-configmap.yaml",
+				"/etc/kubernetes/addons/kube-metrics-server.yaml",
+				"/etc/kubernetes/addons/kube-state-metrics.yaml",
 			}
-			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/kube-state-metrics.yaml")
-			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/coredns-custom-configmap.yaml")
-			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/azuredisk-csi-driver-deployment.yaml")
-			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/storage-classes.yaml")
-			addons = append(addons, "https://jiaxsongarchive.blob.core.windows.net/pub/kube-metrics-server.yaml")
 			return strings.Join(addons, " ")
 		},
 		// TODO ASH DELETE

@@ -509,7 +509,9 @@ K8S_VERSIONS="
 1.17.17
 1.18.18
 1.19.10
+1.19.11
 1.20.6
+1.20.7
 "
 for PATCHED_KUBERNETES_VERSION in ${K8S_VERSIONS}; do
   # Only need to store k8s components >= 1.19 for containerd VHDs
@@ -552,6 +554,7 @@ PATCHED_HYPERKUBE_IMAGES="
 1.18.18
 1.19.10
 1.20.6
+1.20.7
 "
 for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
   # Only need to store k8s components >= 1.19 for containerd VHDs
@@ -637,6 +640,7 @@ mcr.microsoft.com/oss/kubernetes-csi/snapshot-controller:v3.0.3
 mcr.microsoft.com/oss/kubernetes/kube-state-metrics:v1.9.8
 mcr.microsoft.com/oss/kubernetes/ip-masq-agent:v2.5.0
 mcr.microsoft.com/oss/kubernetes/metrics-server:v0.5.0
+mcr.microsoft.com/oss/fluent/fluentd-kubernetes-daemonset-azureblob:v1.12.4
 "
 for ADDON_IMAGE in ${ADDON_IMAGES}; do
   pullContainerImage ${cliTool} ${ADDON_IMAGE}

@@ -626,6 +626,17 @@ mcr.microsoft.com/azure-application-gateway/kubernetes-ingress:1.2.0
 mcr.microsoft.com/azure-application-gateway/kubernetes-ingress:1.3.0
 mcr.microsoft.com/oss/azure/aad-pod-identity/nmi:v1.6.3
 mcr.microsoft.com/oss/azure/aad-pod-identity/nmi:v1.7.0
+mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.3.0.1
+mcr.microsoft.com/oss/kubernetes-csi/csi-attacher:v3.1.0
+mcr.microsoft.com/oss/kubernetes-csi/csi-node-driver-registrar:v2.2.0
+mcr.microsoft.com/oss/kubernetes-csi/csi-provisioner:v2.1.1
+mcr.microsoft.com/oss/kubernetes-csi/csi-resizer:v1.1.0
+mcr.microsoft.com/oss/kubernetes-csi/csi-snapshotter:v3.0.3
+mcr.microsoft.com/oss/kubernetes-csi/livenessprobe:v2.3.0
+mcr.microsoft.com/oss/kubernetes-csi/snapshot-controller:v3.0.3
+mcr.microsoft.com/oss/kubernetes/kube-state-metrics:v1.9.8
+mcr.microsoft.com/oss/kubernetes/ip-masq-agent:v2.5.0
+mcr.microsoft.com/oss/kubernetes/metrics-server:v0.5.0
 "
 for ADDON_IMAGE in ${ADDON_IMAGES}; do
   pullContainerImage ${cliTool} ${ADDON_IMAGE}

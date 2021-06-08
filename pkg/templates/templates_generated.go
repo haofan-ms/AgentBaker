@@ -1,7 +1,6 @@
 // Code generated for package templates by go-bindata DO NOT EDIT. (@generated)
 // sources:
 // linux/cloud-init/artifacts/apt-preferences
-// linux/cloud-init/artifacts/audit-policy.yaml
 // linux/cloud-init/artifacts/auditd-rules
 // linux/cloud-init/artifacts/cis.sh
 // linux/cloud-init/artifacts/containerd-monitor.service
@@ -26,6 +25,7 @@
 // linux/cloud-init/artifacts/etcd.service
 // linux/cloud-init/artifacts/health-monitor.sh
 // linux/cloud-init/artifacts/init-aks-custom-cloud.sh
+// linux/cloud-init/artifacts/ip-masq-agent-configmap.yaml
 // linux/cloud-init/artifacts/kms.service
 // linux/cloud-init/artifacts/kubeadm-config.yaml
 // linux/cloud-init/artifacts/kubelet-monitor.service
@@ -130,183 +130,6 @@ func linuxCloudInitArtifactsAptPreferences() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "linux/cloud-init/artifacts/apt-preferences", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _linuxCloudInitArtifactsAuditPolicyYaml = []byte(`---
-apiVersion: audit.k8s.io/v1beta1
-kind: Policy
-rules:
-  # audit level 'None' for low-risk requests
-  - level: None
-    users: ["system:kube-proxy"]
-    verbs: ["watch"]
-    resources:
-      - group: ""
-        resources: ["endpoints", "services", "services/status"]
-  # audit level 'None' for low-risk requests
-  - level: None
-    users: ["kubelet"] # legacy kubelet identity
-    verbs: ["get"]
-    resources:
-      - group: ""
-        resources: ["nodes", "nodes/status"]
-  # audit level 'None' for low-risk requests
-  - level: None
-    userGroups: ["system:nodes"]
-    verbs: ["get"]
-    resources:
-      - group: ""
-        resources: ["nodes", "nodes/status"]
-  # audit level 'None' for low-risk requests
-  - level: None
-    users:
-      - aksService # the default user/cert used by aks in master node
-      - system:serviceaccount:kube-system:endpoint-controller
-    verbs: ["get", "update"]
-    namespaces: ["kube-system"]
-    resources:
-      - group: ""
-        resources: ["endpoints"]
-  # audit level 'None' for low-risk requests
-  - level: None
-    users: ["system:apiserver"]
-    verbs: ["get"]
-    resources:
-      - group: ""
-        resources: ["namespaces", "namespaces/status", "namespaces/finalize"]
-  # audit level 'None' for low-risk requests
-  - level: None
-    users:
-      - aksService # the default user/cert used by aks in master node
-    verbs: ["get", "list"]
-    resources:
-      - group: "metrics.k8s.io"
-  # Don't log these read-only URLs.
-  - level: None
-    nonResourceURLs:
-      - /healthz*
-      - /version
-      - /swagger*
-  # Monitoring of delete actions to detect security relevant activities.
-  - level: Metadata
-    verbs: ["delete"]
-    resources:
-      - group: ""
-        resources: ["events"]
-  # Don't log other events requests.
-  - level: None
-    resources:
-      - group: ""
-        resources: ["events"]
-  # node and pod status calls from nodes are high-volume and can be large, don't log responses for expected updates from nodes
-  - level: Request
-    users: ["client", "kubelet", "system:node-problem-detector", "system:serviceaccount:kube-system:node-problem-detector", "system:serviceaccount:kube-system:aci-connector-linux"]
-    verbs: ["update","patch"]
-    resources:
-      - group: ""
-        resources: ["nodes/status", "pods/status"]
-    omitStages:
-      - "RequestReceived"
-  # node and pod status calls from nodes are high-volume and can be large, don't log responses for expected updates from nodes
-  - level: Request
-    userGroups: ["system:nodes"]
-    verbs: ["update","patch"]
-    resources:
-      - group: ""
-        resources: ["nodes/status", "pods/status"]
-    omitStages:
-      - "RequestReceived"
-  # deletecollection calls can be large, don't log responses for expected namespace deletions
-  - level: Request
-    users: ["system:serviceaccount:kube-system:namespace-controller"]
-    verbs: ["deletecollection"]
-    omitStages:
-      - "RequestReceived"
-  # overriding the default behavior of coredns might have security threats for Kubernetes DNS in security perspective, set the level as RequestResponse
-  - level: RequestResponse
-    verbs: ["update","patch"]
-    resources:
-      - group: ""
-        resources: ["configmaps"]
-        resourceNames: ["coredns-custom"]
-    namespaces: ["kube-system"]
-    omitStages:
-      - "RequestReceived"
-  # Secrets, ConfigMaps, ServiceAccounts and TokenReviews can contain sensitive & binary data,
-  # so only log at the Metadata level.
-  - level: Metadata
-    resources:
-      - group: ""
-        resources: ["secrets", "configmaps", "serviceaccounts"]
-      - group: authentication.k8s.io
-        resources: ["tokenreviews"]
-    omitStages:
-      - "RequestReceived"
-  # Get repsonses can be large; don't log response
-  - level: Request
-    verbs: ["get", "list", "watch"]
-    resources:
-      - group: ""
-      - group: "admissionregistration.k8s.io"
-      - group: "apiextensions.k8s.io"
-      - group: "apiregistration.k8s.io"
-      - group: "apps"
-      - group: "authentication.k8s.io"
-      - group: "authorization.k8s.io"
-      - group: "autoscaling"
-      - group: "batch"
-      - group: "certificates.k8s.io"
-      - group: "extensions"
-      - group: "metrics.k8s.io"
-      - group: "networking.k8s.io"
-      - group: "policy"
-      - group: "rbac.authorization.k8s.io"
-      - group: "scheduling.k8s.io"
-      - group: "settings.k8s.io"
-      - group: "storage.k8s.io"
-    omitStages:
-      - "RequestReceived"
-  # Default level for known APIs
-  - level: RequestResponse
-    resources:
-      - group: ""
-      - group: "admissionregistration.k8s.io"
-      - group: "apiextensions.k8s.io"
-      - group: "apiregistration.k8s.io"
-      - group: "apps"
-      - group: "authentication.k8s.io"
-      - group: "authorization.k8s.io"
-      - group: "autoscaling"
-      - group: "batch"
-      - group: "certificates.k8s.io"
-      - group: "extensions"
-      - group: "metrics.k8s.io"
-      - group: "networking.k8s.io"
-      - group: "policy"
-      - group: "rbac.authorization.k8s.io"
-      - group: "scheduling.k8s.io"
-      - group: "settings.k8s.io"
-      - group: "storage.k8s.io"
-    omitStages:
-      - "RequestReceived"
-  # Default level for all other requests.
-  - level: Metadata
-    omitStages:
-      - "RequestReceived"`)
-
-func linuxCloudInitArtifactsAuditPolicyYamlBytes() ([]byte, error) {
-	return _linuxCloudInitArtifactsAuditPolicyYaml, nil
-}
-
-func linuxCloudInitArtifactsAuditPolicyYaml() (*asset, error) {
-	bytes, err := linuxCloudInitArtifactsAuditPolicyYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "linux/cloud-init/artifacts/audit-policy.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -3143,6 +2966,38 @@ func linuxCloudInitArtifactsInitAksCustomCloudSh() (*asset, error) {
 	return a, nil
 }
 
+var _linuxCloudInitArtifactsIpMasqAgentConfigmapYaml = []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: azure-ip-masq-agent-config
+  namespace: kube-system
+  labels:
+    component: azure-ip-masq-agent
+    kubernetes.io/cluster-service: "true"
+data:
+  ip-masq-agent: |-
+    nonMasqueradeCIDRs:
+      - {{PodCIDR}}{{if IsAzureCNI}}
+      - 168.63.129.16/32{{end}}
+    masqLinkLocal: {{IsAzureCNI}}
+    resyncInterval: 60s
+`)
+
+func linuxCloudInitArtifactsIpMasqAgentConfigmapYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsIpMasqAgentConfigmapYaml, nil
+}
+
+func linuxCloudInitArtifactsIpMasqAgentConfigmapYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsIpMasqAgentConfigmapYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/ip-masq-agent-configmap.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _linuxCloudInitArtifactsKmsService = []byte(`[Unit]
 Description=azurekms
 Requires=docker.service
@@ -4883,12 +4738,12 @@ write_files:
   content: |
     {{GetParameter "apiServerPrivateKey"}}
 
-- path: /etc/kubernetes/audit/audit-policy.yaml
+- path: /etc/kubernetes/addons/ip-masq-agent-configmap.yaml
   permissions: "0600"
   encoding: gzip
   owner: root
   content: !!binary |
-    {{GetVariableProperty "cloudInitData" "auditpolicy"}}
+    {{GetVariableProperty "cloudInitData" "ipMasqAgentConfigmap"}}
 
 - path: /etc/kubernetes/kustomize/coredns/kustomization.yaml
   permissions: "0600"
@@ -7566,7 +7421,6 @@ func AssetNames() []string {
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
 	"linux/cloud-init/artifacts/apt-preferences":                           linuxCloudInitArtifactsAptPreferences,
-	"linux/cloud-init/artifacts/audit-policy.yaml":                         linuxCloudInitArtifactsAuditPolicyYaml,
 	"linux/cloud-init/artifacts/auditd-rules":                              linuxCloudInitArtifactsAuditdRules,
 	"linux/cloud-init/artifacts/cis.sh":                                    linuxCloudInitArtifactsCisSh,
 	"linux/cloud-init/artifacts/containerd-monitor.service":                linuxCloudInitArtifactsContainerdMonitorService,
@@ -7591,6 +7445,7 @@ var _bindata = map[string]func() (*asset, error){
 	"linux/cloud-init/artifacts/etcd.service":                              linuxCloudInitArtifactsEtcdService,
 	"linux/cloud-init/artifacts/health-monitor.sh":                         linuxCloudInitArtifactsHealthMonitorSh,
 	"linux/cloud-init/artifacts/init-aks-custom-cloud.sh":                  linuxCloudInitArtifactsInitAksCustomCloudSh,
+	"linux/cloud-init/artifacts/ip-masq-agent-configmap.yaml":              linuxCloudInitArtifactsIpMasqAgentConfigmapYaml,
 	"linux/cloud-init/artifacts/kms.service":                               linuxCloudInitArtifactsKmsService,
 	"linux/cloud-init/artifacts/kubeadm-config.yaml":                       linuxCloudInitArtifactsKubeadmConfigYaml,
 	"linux/cloud-init/artifacts/kubelet-monitor.service":                   linuxCloudInitArtifactsKubeletMonitorService,
@@ -7677,7 +7532,6 @@ var _bintree = &bintree{nil, map[string]*bintree{
 		"cloud-init": &bintree{nil, map[string]*bintree{
 			"artifacts": &bintree{nil, map[string]*bintree{
 				"apt-preferences":                           &bintree{linuxCloudInitArtifactsAptPreferences, map[string]*bintree{}},
-				"audit-policy.yaml":                         &bintree{linuxCloudInitArtifactsAuditPolicyYaml, map[string]*bintree{}},
 				"auditd-rules":                              &bintree{linuxCloudInitArtifactsAuditdRules, map[string]*bintree{}},
 				"cis.sh":                                    &bintree{linuxCloudInitArtifactsCisSh, map[string]*bintree{}},
 				"containerd-monitor.service":                &bintree{linuxCloudInitArtifactsContainerdMonitorService, map[string]*bintree{}},
@@ -7702,6 +7556,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 				"etcd.service":                              &bintree{linuxCloudInitArtifactsEtcdService, map[string]*bintree{}},
 				"health-monitor.sh":                         &bintree{linuxCloudInitArtifactsHealthMonitorSh, map[string]*bintree{}},
 				"init-aks-custom-cloud.sh":                  &bintree{linuxCloudInitArtifactsInitAksCustomCloudSh, map[string]*bintree{}},
+				"ip-masq-agent-configmap.yaml":              &bintree{linuxCloudInitArtifactsIpMasqAgentConfigmapYaml, map[string]*bintree{}},
 				"kms.service":                               &bintree{linuxCloudInitArtifactsKmsService, map[string]*bintree{}},
 				"kubeadm-config.yaml":                       &bintree{linuxCloudInitArtifactsKubeadmConfigYaml, map[string]*bintree{}},
 				"kubelet-monitor.service":                   &bintree{linuxCloudInitArtifactsKubeletMonitorService, map[string]*bintree{}},

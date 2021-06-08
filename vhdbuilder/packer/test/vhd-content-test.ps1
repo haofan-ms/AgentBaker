@@ -71,7 +71,9 @@ function Test-FilesToCacheOnVHD
             "https://kubernetesartifacts.azureedge.net/kubernetes/v1.17.17-azs/windowszip/v1.17.17-azs-1int.zip",
             "https://kubernetesartifacts.azureedge.net/kubernetes/v1.18.18-azs/windowszip/v1.18.18-azs-1int.zip",
             "https://kubernetesartifacts.azureedge.net/kubernetes/v1.19.10-azs/windowszip/v1.19.10-azs-1int.zip",
+            "https://kubernetesreleases.blob.core.windows.net/kubernetes/v1.19.11-azs/windowszip/v1.19.11-azs-1int.zip",
             "https://kubernetesartifacts.azureedge.net/kubernetes/v1.20.6-azs/windowszip/v1.20.6-azs-1int.zip"
+            "https://kubernetesreleases.blob.core.windows.net/kubernetes/v1.20.7-azs/windowszip/v1.20.7-azs-1int.zip"
         );
         # Please add new winzips with Kuberentes version >= 1.20 here
         "c:\akse-cache\win-k8s-docker-and-containerd\" = @(

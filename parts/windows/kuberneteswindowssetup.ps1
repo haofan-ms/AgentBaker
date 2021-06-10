@@ -437,8 +437,7 @@ try
                     -KubeDir $global:KubeDir `
                     -AADClientSecret $([System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($AADClientSecret))) `
                     -NetworkAPIVersion $NetworkAPIVersion `
-                    -AzureEnvironmentFilePath $([io.path]::Combine($global:KubeDir, "azurestackcloud.json")) `
-                    -IdentitySystem "{{ GetIdentitySystem }}"
+                    -AzureEnvironmentFilePath $([io.path]::Combine($global:KubeDir, "azurestackcloud.json"))
             }
         }
         elseif ($global:NetworkPlugin -eq "kubenet") {

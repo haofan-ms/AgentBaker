@@ -89,11 +89,12 @@ customizeK8s() {
     fi
 
     if [ "${FIRST_MASTER_NODE}" = true ]; then
-        retrycmd_if_failure 150 10 300 kubeadm init phase certs all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 150 10 300 kubeadm init phase kubeconfig all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 150 10 300 kubeadm init phase control-plane all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        # times sleep timeout
+        retrycmd_if_failure 3 5 30 kubeadm init phase certs all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 3 5 30 kubeadm init phase kubeconfig all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 3 5 30 kubeadm init phase control-plane all --config /etc/kubernetes/kubeadm-config.yaml -v 9
         sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
-        retrycmd_if_failure 150 10 300 kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --skip-phases=control-plane,certs,kubeconfig --ignore-preflight-errors=all  -v 9
+        retrycmd_if_failure 5 10 300 kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --skip-phases=control-plane,certs,kubeconfig --ignore-preflight-errors=all  -v 9
 
         cat << EOF | retrycmd_if_failure 5 10 30 kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
 apiVersion: rbac.authorization.k8s.io/v1
@@ -119,10 +120,10 @@ EOF
             retrycmd_if_failure 5 10 30 kubectl apply -f ${ADDON} --kubeconfig /etc/kubernetes/admin.conf
         done
     else
-        retrycmd_if_failure 150 10 300 kubeadm join phase control-plane-prepare all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 3 5 30 kubeadm join phase control-plane-prepare all --config /etc/kubernetes/kubeadm-config.yaml -v 9
         sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
-        retrycmd_if_failure 150 10 300 kubeadm join phase kubelet-start --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 150 10 300 kubeadm join phase control-plane-join all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 3 5 30 kubeadm join phase kubelet-start --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure 5 10 300 kubeadm join phase control-plane-join all --config /etc/kubernetes/kubeadm-config.yaml -v 9
     fi
 
     # TODO ASH Delete

@@ -19,6 +19,9 @@ for i in ${!certBodies[@]}; do
 done
 IFS=$IFS_backup
 
+cp /root/AzureCACertificates/*.crt /usr/local/share/ca-certificates/
+/usr/sbin/update-ca-certificates
+
 # This copies the updated bundle to the location used by OpenSSL which is commonly used
 cp /etc/ssl/certs/ca-certificates.crt /usr/lib/ssl/cert.pem
 

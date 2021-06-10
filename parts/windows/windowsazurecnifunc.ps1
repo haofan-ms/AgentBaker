@@ -233,6 +233,7 @@ function GenerateAzureStackCNIConfig
 
     $networkInterfacesFile = "$KubeDir\network-interfaces.json"
     $azureCNIConfigFile = "$KubeDir\interfaces.json"
+    $azureConfig = "$KubeDir\azure.json"
     $azureEnvironment = Get-Content $AzureEnvironmentFilePath | ConvertFrom-Json
 
     Write-Log "------------------------------------------------------------------------"

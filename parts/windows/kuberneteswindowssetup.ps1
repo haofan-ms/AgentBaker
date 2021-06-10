@@ -86,10 +86,14 @@ $global:ContainerdWindowsRuntimeHandlers = "{{GetParameter "containerdWindowsRun
 #
 # Set default values for container runtime variables for AKS Windows 2004
 if ($([System.Environment]::OSVersion.Version).Build -eq "19041") {
-    $global:ContainerRuntime = "containerd"
+    $global:ContainerRuntime = "docker"
     $global:ContainerdWindowsRuntimeHandlers = "17763,19041"
     $global:DefaultContainerdWindowsSandboxIsolation = "process"
 }
+
+{{if IsAKSCustomCloud}}
+$global:ContainerRuntime = "docker"
+{{end}}
 
 ## VM configuration passed by Azure
 $global:WindowsTelemetryGUID = "{{GetParameter "windowsTelemetryGUID"}}"

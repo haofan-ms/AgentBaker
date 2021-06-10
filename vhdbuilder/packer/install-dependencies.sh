@@ -215,6 +215,7 @@ done
 # https://github.com/kubernetes/kubernetes/blob/v1.18.10/cmd/kubeadm/app/constants/constants.go#L340
 # https://github.com/kubernetes/kubernetes/blob/v1.18.15/cmd/kubeadm/app/constants/constants.go#L343
 CORE_DNS_VERSIONS="
+1.7.0
 1.6.7
 1.6.6
 1.6.5
@@ -233,9 +234,10 @@ done
 # NOTE: MCR and GCR tags are not an exact match
 ETCD_VERSIONS="
 v3.4.3
+v3.4.13
 "
 for ETCD_VERSION in ${ETCD_VERSIONS}; do
-    CONTAINER_IMAGE="mcr.microsoft.com/oss/etcd-io:${ETCD_VERSION}"
+    CONTAINER_IMAGE="mcr.microsoft.com/oss/etcd-io/etcd:${ETCD_VERSION}"
     pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
     echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
 done

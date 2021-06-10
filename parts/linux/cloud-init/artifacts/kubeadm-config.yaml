@@ -109,4 +109,10 @@ controlPlane:
   localAPIEndpoint:
     advertiseAddress: ""
     bindPort: 443
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+clusterDNS:
+- {{DNSServiceIP}}
+maxPods: {{MaxPods}}
 #EOF

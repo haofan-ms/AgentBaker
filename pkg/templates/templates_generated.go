@@ -710,7 +710,8 @@ roleRef:
 EOF
 
         retrycmd_if_failure_no_stats 5 10 30 kubectl get deploy coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml
-        retrycmd_if_failure_no_stats 5 10 30 kubectl get service coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/service.yaml
+        retrycmd_if_failure_no_stats 5 10 30 kubectl get service kube-dns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/service.yaml
+        retrycmd_if_failure_no_stats 5 10 30 kubectl delete service kube-dns -n kube-system --kubeconfig /etc/kubernetes/admin.conf
         retrycmd_if_failure_no_stats 5 10 30 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
 
         for ADDON in {{GetAddonsURI}}; do
@@ -948,8 +949,7 @@ customizeCNI() {
 
 configureCNIIPTables() {
     if [[ "${NETWORK_PLUGIN}" = "azure" ]]; then
-        jq '.plugins[0].ipam.environment = "mas"' $CNI_BIN_DIR/10-azure.conflist > $CNI_CONFIG_DIR/10-azure.conflist
-        rm -f $CNI_BIN_DIR/10-azure.conflist
+        mv $CNI_BIN_DIR/10-azure.conflist $CNI_CONFIG_DIR/
         chmod 600 $CNI_CONFIG_DIR/10-azure.conflist
         if [[ "${NETWORK_POLICY}" == "calico" ]]; then
           sed -i 's#"mode":"bridge"#"mode":"transparent"#g' $CNI_CONFIG_DIR/10-azure.conflist
@@ -1049,102 +1049,6 @@ disable1804SystemdResolved() {
     {{- else}}
     echo "Disable1804SystemdResolved is false. Skipping."
     {{- end}}
-}
-
-configureAzureStackInterfaces() {
-    NETWORK_INTERFACES_FILE="/etc/kubernetes/network_interfaces.json"
-    AZURE_CNI_CONFIG_FILE="/etc/kubernetes/interfaces.json"
-    AZURESTACK_ENVIRONMENT_JSON_PATH="/etc/kubernetes/AzureStackCloud.json"
-    NETWORK_API_VERSION="2018-08-01"
-
-    SERVICE_MANAGEMENT_ENDPOINT=$(jq -r '.serviceManagementEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH}) #
-    ACTIVE_DIRECTORY_ENDPOINT=$(jq -r '.activeDirectoryEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH}) #
-    RESOURCE_MANAGER_ENDPOINT=$(jq -r '.resourceManagerEndpoint' ${AZURESTACK_ENVIRONMENT_JSON_PATH}) #
-
-    # if [[ ${IDENTITY_SYSTEM,,} == "adfs" ]]; then #
-    TOKEN_URL="${ACTIVE_DIRECTORY_ENDPOINT}/oauth2/token"
-    # else
-    #     TOKEN_URL="${ACTIVE_DIRECTORY_ENDPOINT}${TENANT_ID}/oauth2/token"
-    # fi
-
-    echo "Generating token for Azure Resource Manager"
-    echo "------------------------------------------------------------------------"
-    echo "Parameters"
-    echo "------------------------------------------------------------------------"
-    echo "SERVICE_PRINCIPAL_CLIENT_ID:     ..."
-    echo "SERVICE_PRINCIPAL_CLIENT_SECRET: ..."
-    echo "SERVICE_MANAGEMENT_ENDPOINT:     ${SERVICE_MANAGEMENT_ENDPOINT}"
-    echo "ACTIVE_DIRECTORY_ENDPOINT:       ${ACTIVE_DIRECTORY_ENDPOINT}"
-    echo "TENANT_ID:                       ${TENANT_ID}"
-    echo "IDENTITY_SYSTEM:                 ${IDENTITY_SYSTEM}"
-    echo "TOKEN_URL:                       ${TOKEN_URL}"
-    echo "------------------------------------------------------------------------"
-
-    TOKEN=$(curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X POST \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "grant_type=client_credentials" \
-        -d "client_id=${SERVICE_PRINCIPAL_CLIENT_ID}" \
-        --data-urlencode "client_secret=${SERVICE_PRINCIPAL_CLIENT_SECRET}" \
-        --data-urlencode "resource=${SERVICE_MANAGEMENT_ENDPOINT}" \
-        ${TOKEN_URL} | jq '.access_token' | xargs)
-
-    if [[ -z ${TOKEN} ]]; then
-        echo "Error generating token for Azure Resource Manager"
-        exit 120
-    fi
-
-    echo "Fetching network interface configuration for node"
-    echo "------------------------------------------------------------------------"
-    echo "Parameters"
-    echo "------------------------------------------------------------------------"
-    echo "RESOURCE_MANAGER_ENDPOINT: $RESOURCE_MANAGER_ENDPOINT"
-    echo "SUBSCRIPTION_ID:           $SUBSCRIPTION_ID"
-    echo "RESOURCE_GROUP:            $RESOURCE_GROUP"
-    echo "NETWORK_API_VERSION:       $NETWORK_API_VERSION"
-    echo "------------------------------------------------------------------------"
-
-    curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X GET \
-        -H "Authorization: Bearer ${TOKEN}" \
-        -H "Content-Type: application/json" \
-        "${RESOURCE_MANAGER_ENDPOINT}subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Network/networkInterfaces?api-version=${NETWORK_API_VERSION}" > ${NETWORK_INTERFACES_FILE}
-
-    if [[ ! -s ${NETWORK_INTERFACES_FILE} ]]; then
-        echo "Error fetching network interface configuration for node"
-        exit 121
-    fi
-
-    echo "Generating Azure CNI interface file"
-
-    mapfile -t local_interfaces < <(cat /sys/class/net/*/address | tr -d : | sed 's/.*/\U&/g')
-
-    SDN_INTERFACES=$(jq ".value | map(select(.properties != null) | select(.properties.macAddress != null) | select(.properties.macAddress | inside(\"${local_interfaces[*]}\"))) | map(select((.properties.ipConfigurations | length) > 0))" ${NETWORK_INTERFACES_FILE})
-
-    if [[ -z ${SDN_INTERFACES} ]]; then
-        echo "Error extracting the SDN interfaces from the network interfaces file"
-        exit 123
-    fi
-
-    AZURE_CNI_CONFIG=$(echo ${SDN_INTERFACES} | jq "{Interfaces: [.[] | {MacAddress: .properties.macAddress, IsPrimary: .properties.primary, IPSubnets: [{Prefix: .properties.ipConfigurations[0].properties.subnet.id, IPAddresses: .properties.ipConfigurations | [.[] | {Address: .properties.privateIPAddress, IsPrimary: .properties.primary}]}]}]}")
-
-    mapfile -t SUBNET_IDS < <(echo ${SDN_INTERFACES} | jq '[.[].properties.ipConfigurations[0].properties.subnet.id] | unique | .[]' -r)
-
-    for SUBNET_ID in "${SUBNET_IDS[@]}"; do
-        SUBNET_PREFIX=$(curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X GET \
-            -H "Authorization: Bearer ${TOKEN}" \
-            -H "Content-Type: application/json" \
-            "${RESOURCE_MANAGER_ENDPOINT}${SUBNET_ID:1}?api-version=${NETWORK_API_VERSION}" |
-            jq '.properties.addressPrefix' -r)
-
-        if [[ -z ${SUBNET_PREFIX} ]]; then
-            echo "Error fetching the subnet address prefix for a subnet ID"
-            exit 122
-        fi
-
-        AZURE_CNI_CONFIG=$(echo ${AZURE_CNI_CONFIG} | sed "s|${SUBNET_ID}|${SUBNET_PREFIX}|g")
-    done
-
-    echo ${AZURE_CNI_CONFIG} > ${AZURE_CNI_CONFIG_FILE}
-    chmod 0444 ${AZURE_CNI_CONFIG_FILE}
 }
 
 {{- if NeedsContainerd}}
@@ -2857,24 +2761,18 @@ exit
 
 mkdir -p /root/AzureCACertificates
 # http://168.63.129.16 is a constant for the host's wireserver endpoint
-# certs=$(curl "http://168.63.129.16/machine?comp=acmspackage&type=cacertificates&ext=json")
-# IFS_backup=$IFS
-# IFS=$'\r\n'
-# certNames=($(echo $certs | grep -oP '(?<=Name\": \")[^\"]*'))
-# certBodies=($(echo $certs | grep -oP '(?<=CertBody\": \")[^\"]*'))
-# for i in ${!certBodies[@]}; do
-#     echo ${certBodies[$i]}  | sed 's/\\r\\n/\n/g' | sed 's/\\//g' > "/root/AzureCACertificates/$(echo ${certNames[$i]} | sed 's/.cer/.crt/g')"
-# done
-# IFS=$IFS_backup
+certs=$(curl "http://168.63.129.16/machine?comp=acmspackage&type=cacertificates&ext=json")
+IFS_backup=$IFS
+IFS=$'\r\n'
+certNames=($(echo $certs | grep -oP '(?<=Name\": \")[^\"]*'))
+certBodies=($(echo $certs | grep -oP '(?<=CertBody\": \")[^\"]*'))
+for i in ${!certBodies[@]}; do
+    echo ${certBodies[$i]}  | sed 's/\\r\\n/\n/g' | sed 's/\\//g' > "/root/AzureCACertificates/$(echo ${certNames[$i]} | sed 's/.cer/.crt/g')"
+done
+IFS=$IFS_backup
 
-# cp /root/AzureCACertificates/*.crt /usr/local/share/ca-certificates/
-# /usr/sbin/update-ca-certificates
-
-# Copying the AzureStack root certificate to the appropriate store to be updated.
-AZURESTACK_ROOT_CERTIFICATE_SOURCE_PATH="/var/lib/waagent/Certificates.pem"
-AZURESTACK_ROOT_CERTIFICATE__DEST_PATH="/usr/local/share/ca-certificates/azsCertificate.crt"
-cp $AZURESTACK_ROOT_CERTIFICATE_SOURCE_PATH $AZURESTACK_ROOT_CERTIFICATE__DEST_PATH
-update-ca-certificates
+cp /root/AzureCACertificates/*.crt /usr/local/share/ca-certificates/
+/usr/sbin/update-ca-certificates
 
 # This copies the updated bundle to the location used by OpenSSL which is commonly used
 cp /etc/ssl/certs/ca-certificates.crt /usr/lib/ssl/cert.pem
@@ -3145,6 +3043,12 @@ controlPlane:
   localAPIEndpoint:
     advertiseAddress: ""
     bindPort: 443
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+clusterDNS:
+- {{DNSServiceIP}}
+maxPods: {{MaxPods}}
 #EOF
 `)
 
@@ -5419,10 +5323,14 @@ $global:ContainerdWindowsRuntimeHandlers = "{{GetParameter "containerdWindowsRun
 #
 # Set default values for container runtime variables for AKS Windows 2004
 if ($([System.Environment]::OSVersion.Version).Build -eq "19041") {
-    $global:ContainerRuntime = "containerd"
+    $global:ContainerRuntime = "docker"
     $global:ContainerdWindowsRuntimeHandlers = "17763,19041"
     $global:DefaultContainerdWindowsSandboxIsolation = "process"
 }
+
+{{if IsAKSCustomCloud}}
+$global:ContainerRuntime = "docker"
+{{end}}
 
 ## VM configuration passed by Azure
 $global:WindowsTelemetryGUID = "{{GetParameter "windowsTelemetryGUID"}}"
@@ -5766,8 +5674,7 @@ try
                     -KubeDir $global:KubeDir `+"`"+`
                     -AADClientSecret $([System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($AADClientSecret))) `+"`"+`
                     -NetworkAPIVersion $NetworkAPIVersion `+"`"+`
-                    -AzureEnvironmentFilePath $([io.path]::Combine($global:KubeDir, "azurestackcloud.json")) `+"`"+`
-                    -IdentitySystem "{{ GetIdentitySystem }}"
+                    -AzureEnvironmentFilePath $([io.path]::Combine($global:KubeDir, "azurestackcloud.json"))
             }
         }
         elseif ($global:NetworkPlugin -eq "kubenet") {
@@ -5992,7 +5899,7 @@ Set-AzureCNIConfig
     if ($IsAzureStack) {
         Add-Member -InputObject $configJson.plugins[0].ipam -MemberType NoteProperty -Name "environment" -Value "mas"
     }
-    
+
     $aclRule1 = [PSCustomObject]@{
         Type = 'ACL'
         Protocols = '6'
@@ -6093,13 +6000,13 @@ function GenerateAzureStackCNIConfig
         [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][string] $ResourceGroup,
         [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][string] $NetworkAPIVersion,
         [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][string] $AzureEnvironmentFilePath,
-        [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][string] $IdentitySystem,
         [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][string] $KubeDir
 
     )
 
     $networkInterfacesFile = "$KubeDir\network-interfaces.json"
     $azureCNIConfigFile = "$KubeDir\interfaces.json"
+    $azureConfig = "$KubeDir\azure.json"
     $azureEnvironment = Get-Content $AzureEnvironmentFilePath | ConvertFrom-Json
 
     Write-Log "------------------------------------------------------------------------"
@@ -6123,12 +6030,8 @@ function GenerateAzureStackCNIConfig
 
     Write-Log "Generating token for Azure Resource Manager"
 
-    $tokenURL = ""
-    if($IdentitySystem -ieq "adfs") {
-        $tokenURL = "$($azureEnvironment.activeDirectoryEndpoint)adfs/oauth2/token"
-    } else {
-        $tokenURL = "$($azureEnvironment.activeDirectoryEndpoint)$TenantId/oauth2/token"
-    }
+    $TenantId = (Get-Content $azureConfig | ConvertFrom-Json).tenantId
+    $tokenURL = "$($azureEnvironment.activeDirectoryEndpoint)$TenantId/oauth2/token"
 
     Add-Type -AssemblyName System.Web
     $encodedSecret = [System.Web.HttpUtility]::UrlEncode($AADClientSecret)

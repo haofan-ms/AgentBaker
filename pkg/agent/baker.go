@@ -312,6 +312,13 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 			return "cni"
 		},
 		// TODO ASH DELETE
+		"MaxPods": func() int {
+			if cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin == NetworkPluginKubenet {
+				return 110
+			}
+			return 30
+		},
+		// TODO ASH DELETE
 		"NonMasqueradeCIDR": func() string {
 			if cs.Properties.IsIPMasqAgentEnabled() {
 				return "0.0.0.0/0"

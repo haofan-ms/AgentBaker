@@ -336,6 +336,9 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 				"/etc/kubernetes/addons/kube-metrics-server.yaml",
 				"/etc/kubernetes/addons/kube-state-metrics.yaml",
 			}
+			if cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy == NetworkPolicyAzure {
+				addons = append(addons, "/etc/kubernetes/addons/azure-network-policy.yaml")
+			}
 			return strings.Join(addons, " ")
 		},
 		// TODO ASH DELETE

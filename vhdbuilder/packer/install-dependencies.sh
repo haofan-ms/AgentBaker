@@ -624,6 +624,7 @@ mcr.microsoft.com/azure-policy/policy-kubernetes-webhook:prod_20210209.1
 mcr.microsoft.com/azure-application-gateway/kubernetes-ingress:1.0.1-rc3
 mcr.microsoft.com/azure-application-gateway/kubernetes-ingress:1.2.0
 mcr.microsoft.com/azure-application-gateway/kubernetes-ingress:1.3.0
+mcr.microsoft.com/containernetworking/azure-npm:v1.2.2_hotfix
 mcr.microsoft.com/oss/azure/aad-pod-identity/nmi:v1.6.3
 mcr.microsoft.com/oss/azure/aad-pod-identity/nmi:v1.7.0
 mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.3.0.1

@@ -69,6 +69,8 @@ copyPackerFiles() {
   KUBE_METRICS_SERVER_DST=/etc/kubernetes/addons/kube-metrics-server.yaml
   KUBE_STATE_METRICS_SRC=/home/packer/kube-state-metrics.yaml
   KUBE_STATE_METRICS_DST=/etc/kubernetes/addons/kube-state-metrics.yaml
+  AZURE_NETWORK_POLICY_SRC=/home/packer/azure-network-policy.yaml
+  AZURE_NETWORK_POLICY_DST=/etc/kubernetes/addons/azure-network-policy.yaml
   NOTICE_SRC=/home/packer/NOTICE.txt
   NOTICE_DEST=/NOTICE.txt
   if [[ ${UBUNTU_RELEASE} == "16.04" ]]; then
@@ -113,6 +115,7 @@ copyPackerFiles() {
   cpAndMode $IP_MASQ_AGENT_SRC $IP_MASQ_AGENT_DST 600
   cpAndMode $KUBE_METRICS_SERVER_SRC $KUBE_METRICS_SERVER_DST 600
   cpAndMode $KUBE_STATE_METRICS_SRC $KUBE_STATE_METRICS_DST 600
+  cpAndMode $AZURE_NETWORK_POLICY_SRC $AZURE_NETWORK_POLICY_DST 600
   cpAndMode $NOTICE_SRC $NOTICE_DEST 444
 }
 

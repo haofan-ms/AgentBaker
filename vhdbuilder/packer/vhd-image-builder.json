@@ -276,6 +276,11 @@
     },
     {
       "type": "file",
+      "source": "vhdbuilder/static/azure-network-policy.yaml",
+      "destination": "/home/packer/azure-network-policy.yaml"
+    },
+    {
+      "type": "file",
       "source": "vhdbuilder/notice.txt",
       "destination": "/home/packer/NOTICE.txt"
     },

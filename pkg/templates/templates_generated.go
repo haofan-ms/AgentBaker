@@ -5713,7 +5713,7 @@ try
                 -KubeClusterCIDR $global:KubeClusterCIDR `+"`"+`
                 -KubeServiceCIDR $global:KubeServiceCIDR `+"`"+`
                 -VNetCIDR $global:VNetCIDR `+"`"+`
-                -IsAzureStack {{if IsAKSCustomCloud}}$true{{else}}$false{{end}} ` + "`" + `
+                -IsAzureStack {{if IsAKSCustomCloud}}$true{{else}}$false{{end}} `+"`"+`
                 -IsDualStackEnabled $global:IsDualStackEnabled
 
             if ($TargetEnvironment -ieq "AzureStackCloud") {

@@ -4378,6 +4378,12 @@ write_files:
           {{- else}}
           runtime_engine = "/usr/bin/runc"
           {{- end}}
+        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+          {{- if IsControlPlane}}
+          SystemdCgroup = true
+          {{- else}}
+          SystemdCgroup = false
+          {{- end}}
       {{ if and (IsKubenet) (not HasCalicoNetworkPolicy) }}
       [plugins."io.containerd.grpc.v1.cri".cni]
         bin_dir = "/opt/cni/bin"
@@ -4386,8 +4392,6 @@ write_files:
       {{ end}}
       [plugins."io.containerd.grpc.v1.cri".registry.headers]
         X-Meta-Source-Client = ["azure/aks"]
-    [metrics]
-      address = "127.0.0.1:10257"
     {{ if TeleportEnabled }}
     [proxy_plugins]
       [proxy_plugins.teleportd]
@@ -4428,6 +4432,43 @@ write_files:
             "externalSetMarkChain": "KUBE-MARK-MASQ"
           }]
       }
+
+{{ if IsKubenet }}
+- path: /etc/cni/net.d/10-containerd-net.conflist
+  permissions: "0644"
+  owner: root
+  content: |
+      {
+        "cniVersion": "0.3.1",
+        "name": "kubenet",
+        "plugins": [
+          {
+            "type": "bridge",
+            "bridge": "cbr0",
+            "mtu": 1500,
+            "addIf": "eth0",
+            "isGateway": true,
+            {{- if IsIPMasqAgentEnabled}}
+            "ipMasq": false,
+            {{- else}}
+            "ipMasq": true,
+            {{- end}}
+            "promiscMode": true,
+            "hairpinMode": false,
+            "ipam": {
+              "type": "host-local",
+              "subnet": "{{PodCIDR}}",
+              "routes": [{ "dst": "0.0.0.0/0" }]
+            }
+          },
+          {
+            "type": "portmap",
+            "capabilities": { "portMappings": true },
+            "externalSetMarkChain": "KUBE-MARK-MASQ"
+          }
+        ]
+      }
+{{ end}}
 
 - path: /etc/systemd/system/containerd.service
   permissions: "0644"

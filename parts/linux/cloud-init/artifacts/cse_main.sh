@@ -148,7 +148,8 @@ ensureDHCPv6
 
 {{- if NeedsContainerd}}
 ensureContainerd {{/* containerd should not be configured until cni has been configured first */}}
-{{- else}}
+{{- end}}
+{{- if NeedsDocker}}
 ensureDocker
 {{- end}}
 

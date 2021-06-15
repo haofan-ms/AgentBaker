@@ -103,7 +103,8 @@ installSGXDrivers() {
 installContainerRuntime() {
     {{if NeedsContainerd}}
         installStandaloneContainerd
-    {{else}}
+    {{end}}
+    {{if NeedsDocker}}
         installMoby
     {{end}}
 }

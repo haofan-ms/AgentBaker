@@ -53,6 +53,11 @@ if [[ ${UBUNTU_RELEASE} == "18.04" ]]; then
   disableSystemdTimesyncdAndEnableNTP || exit 1
 fi
 
+MOBY_VERSION="19.03.14"
+installMoby
+echo "  - moby v${MOBY_VERSION}" >> ${VHD_LOGS_FILEPATH}
+cliTool="docker"
+
 if [[ ${CONTAINER_RUNTIME:-""} == "containerd" ]]; then
   echo "VHD will be built with containerd as the container runtime"
   CONTAINERD_VERSION="1.4.3"
@@ -69,13 +74,6 @@ if [[ ${CONTAINER_RUNTIME:-""} == "containerd" ]]; then
 
   # also pre-download Teleportd plugin for containerd
   # downloadTeleportdPlugin ${TELEPORTD_PLUGIN_DOWNLOAD_URL} "0.6.0"
-else
-  CONTAINER_RUNTIME="docker"
-  MOBY_VERSION="19.03.14"
-  installMoby
-  echo "VHD will be built with docker as container runtime"
-  echo "  - moby v${MOBY_VERSION}" >> ${VHD_LOGS_FILEPATH}
-  cliTool="docker"
 fi
 
 installBpftrace
@@ -644,10 +642,17 @@ mcr.microsoft.com/oss/kubernetes-csi/snapshot-controller:v3.0.3
 mcr.microsoft.com/oss/kubernetes/kube-state-metrics:v1.9.8
 mcr.microsoft.com/oss/kubernetes/ip-masq-agent:v2.5.0
 mcr.microsoft.com/oss/kubernetes/metrics-server:v0.5.0
-mcr.microsoft.com/oss/fluent/fluentd-kubernetes-daemonset-azureblob:v1.12.4
 "
 for ADDON_IMAGE in ${ADDON_IMAGES}; do
   pullContainerImage ${cliTool} ${ADDON_IMAGE}
+  echo "  - ${ADDON_IMAGE}" >> ${VHD_LOGS_FILEPATH}
+done
+
+ADDON_IMAGES="
+mcr.microsoft.com/oss/fluent/fluentd-kubernetes-daemonset-azureblob:v1.12.4
+"
+for ADDON_IMAGE in ${ADDON_IMAGES}; do
+  pullContainerImage docker ${ADDON_IMAGE}
   echo "  - ${ADDON_IMAGE}" >> ${VHD_LOGS_FILEPATH}
 done
 

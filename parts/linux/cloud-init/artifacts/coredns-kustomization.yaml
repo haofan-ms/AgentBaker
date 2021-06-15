@@ -12,3 +12,4 @@ patchesJson6902:
     kind: Deployment
     name: coredns
     namespace: kube-system
+#EOF

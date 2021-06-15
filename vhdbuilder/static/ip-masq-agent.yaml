@@ -61,3 +61,4 @@ spec:
         - name: azure-ip-masq-agent-config-volume
           configMap:
             name: azure-ip-masq-agent-config
+#EOF

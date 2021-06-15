@@ -1499,3 +1499,4 @@ parameters:
   cachingmode: ReadOnly
   kind: Managed
   storageaccounttype: Premium_LRS
+#EOF

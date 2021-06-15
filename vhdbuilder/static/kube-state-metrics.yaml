@@ -98,3 +98,4 @@ spec:
           ports:
             - name: http-metrics
               containerPort: 8080
+#EOF

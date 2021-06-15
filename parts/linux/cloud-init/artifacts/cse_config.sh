@@ -71,6 +71,12 @@ configureSecrets(){
 }
 
 customizeK8s() {
+    wait_for_file 1200 1 /etc/kubernetes/kubeadm-config.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+    wait_for_file 1200 1 /etc/kubernetes/kustomize/coredns/cluster-ip.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+    wait_for_file 1200 1 /etc/kubernetes/kustomize/coredns/kustomization.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+    wait_for_file 1200 1 /etc/kubernetes/kustomize/coredns/tolerations.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+    # wait_for_file 1200 1 /etc/kubernetes/addons/...
+    
     mkdir -p /etc/kubernetes/pki/etcd
     cp -p /etc/kubernetes/certs/ca.crt /etc/kubernetes/pki/ca.crt
     cp -p /etc/kubernetes/pki/sa.key /etc/kubernetes/pki/sa.pub
@@ -78,6 +84,9 @@ customizeK8s() {
     cp -p /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/front-proxy-ca.key
     cp -p /etc/kubernetes/pki/ca.crt /etc/kubernetes/pki/etcd/ca.crt
     cp -p /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/etcd/ca.key
+
+    mkdir -p /etc/kubernetes/patches
+    KubeControllerManagerPath
 
     FIRST_MASTER_NODE=true
     echo $NODE_NAME | grep -E '*-0$' > /dev/null
@@ -88,15 +97,16 @@ customizeK8s() {
         FIRST_MASTER_NODE=false
     fi
 
-    if [ "${FIRST_MASTER_NODE}" = true ]; then
-        # times sleep timeout
-        retrycmd_if_failure 3 5 30 kubeadm init phase certs all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 3 5 30 kubeadm init phase kubeconfig all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 3 5 30 kubeadm init phase control-plane all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
-        retrycmd_if_failure 5 10 300 kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --skip-phases=control-plane,certs,kubeconfig --ignore-preflight-errors=all  -v 9
+    CONFIG=/etc/kubernetes/kubeadm-config.yaml
+    KUBECONFIG=/etc/kubernetes/admin.conf
 
-        cat << EOF | retrycmd_if_failure 5 10 30 kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+    if [ "${FIRST_MASTER_NODE}" = true ]; then
+        retrycmd_if_failure_no_stats 10 15 30 kubeadm init phase certs all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 30 kubeadm init phase kubeconfig all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 30 kubeadm init phase control-plane all --config ${CONFIG} --experimental-patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 300 kubeadm init --config ${CONFIG} --skip-phases=control-plane,certs,kubeconfig --ignore-preflight-errors=all -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
+
+        cat << EOF | retrycmd_if_failure 5 10 30 kubectl apply --kubeconfig ${KUBECONFIG} -f -
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -111,26 +121,36 @@ roleRef:
   name: system:node
 EOF
 
-        retrycmd_if_failure_no_stats 5 10 30 kubectl get deploy coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml
-        retrycmd_if_failure_no_stats 5 10 30 kubectl get service kube-dns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/service.yaml
-        retrycmd_if_failure_no_stats 5 10 30 kubectl delete service kube-dns -n kube-system --kubeconfig /etc/kubernetes/admin.conf
-        retrycmd_if_failure_no_stats 5 10 30 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+        retrycmd_if_failure_no_stats 5 10 30 kubectl get deploy coredns -n kube-system --kubeconfig ${KUBECONFIG} -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml || exit $ERR_ASH_APPLY_ADDON
+        retrycmd_if_failure_no_stats 5 10 30 kubectl get service kube-dns -n kube-system --kubeconfig ${KUBECONFIG} -o yaml > /etc/kubernetes/kustomize/coredns/service.yaml || exit $ERR_ASH_APPLY_ADDON
+        retrycmd_if_failure_no_stats 5 10 30 kubectl delete service kube-dns -n kube-system --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
+        retrycmd_if_failure_no_stats 5 10 30 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_APPLY_ADDON
 
         for ADDON in {{GetAddonsURI}}; do
-            retrycmd_if_failure 5 10 30 kubectl apply -f ${ADDON} --kubeconfig /etc/kubernetes/admin.conf
+            retrycmd_if_failure 5 10 30 kubectl apply -f ${ADDON} --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
         done
     else
-        retrycmd_if_failure 3 5 30 kubeadm join phase control-plane-prepare all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
-        retrycmd_if_failure 3 5 30 kubeadm join phase kubelet-start --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 5 10 300 kubeadm join phase control-plane-join all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure_no_stats 10 15 30 kubeadm join phase control-plane-prepare all --config ${CONFIG} --experimental-patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 30 kubeadm join phase kubelet-start --config ${CONFIG} -v 9 || exit $ERR_KUBELET_START_FAIL
+        retrycmd_if_failure_no_stats 10 15 300 kubeadm join --config ${CONFIG} --skip-phases=control-plane-prepare,kubelet-start --ignore-preflight-errors=all -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
     fi
 
     # TODO ASH Delete
     mkdir -p /home/${ADMINUSER}/.kube
-    cp /etc/kubernetes/admin.conf /home/${ADMINUSER}/.kube/config
+    cp ${KUBECONFIG} /home/${ADMINUSER}/.kube/config
     chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube
     chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube/config
+}
+
+KubeControllerManagerPath() {
+    cat << EOF > /etc/kubernetes/patches/kube-controller-manager+strategic.yaml
+spec:
+  containers:
+  - name: kube-controller-manager
+    env:
+    - name: AZURE_ENVIRONMENT_FILEPATH
+      value: /etc/kubernetes/azurestackcloud.json
+EOF
 }
 
 {{- if EnableHostsConfigAgent}}
@@ -387,7 +407,7 @@ generateIPAMFileSource() {
 
     if [[ -z ${TOKEN} ]]; then
         echo "Error generating token for Azure Resource Manager"
-        exit 120
+        exit ${ERR_ASH_GET_ARM_TOKEN}
     fi
 
     curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X GET \
@@ -398,7 +418,7 @@ generateIPAMFileSource() {
 
     if [[ ! -s ${NETWORK_INTERFACES_FILE} ]]; then
         echo "Error fetching network interface configuration for node"
-        exit 121
+        exit ${ERR_ASH_GET_NETWORK_CONFIGURATION}
     fi
 
     echo "Generating Azure CNI interface file"
@@ -409,7 +429,7 @@ generateIPAMFileSource() {
 
     if [[ -z ${SDN_INTERFACES} ]]; then
         echo "Error extracting the SDN interfaces from the network interfaces file"
-        exit 123
+        exit ${ERR_ASH_GET_SUBNET_PREFIX}
     fi
 
     AZURE_CNI_CONFIG=$(echo ${SDN_INTERFACES} | jq "{Interfaces: [.[] | {MacAddress: .properties.macAddress, IsPrimary: .properties.primary, IPSubnets: [{Prefix: .properties.ipConfigurations[0].properties.subnet.id, IPAddresses: .properties.ipConfigurations | [.[] | {Address: .properties.privateIPAddress, IsPrimary: .properties.primary}]}]}]}")
@@ -425,7 +445,7 @@ generateIPAMFileSource() {
 
         if [[ -z ${SUBNET_PREFIX} ]]; then
             echo "Error fetching the subnet address prefix for a subnet ID"
-            exit 122
+            exit ${ERR_ASH_GET_SUBNET_PREFIX}
         fi
 
         AZURE_CNI_CONFIG=$(echo ${AZURE_CNI_CONFIG} | sed "s|${SUBNET_ID}|${SUBNET_PREFIX}|g")

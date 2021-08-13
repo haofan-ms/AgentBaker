@@ -177,7 +177,7 @@ spec:
           operator: "Exists"
           effect: "NoSchedule"
       nodeSelector:
-        kubernetes.azure.com/role: master
+        kubernetes.io/role: master
         kubernetes.io/os: linux
       priorityClassName: system-cluster-critical
       serviceAccountName: metrics-server

@@ -632,7 +632,7 @@ mcr.microsoft.com/azure-application-gateway/kubernetes-ingress:1.3.0
 mcr.microsoft.com/containernetworking/azure-npm:v1.2.2_hotfix
 mcr.microsoft.com/oss/azure/aad-pod-identity/nmi:v1.6.3
 mcr.microsoft.com/oss/azure/aad-pod-identity/nmi:v1.7.0
-mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.3.0.1
+mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.5.1
 mcr.microsoft.com/oss/kubernetes-csi/csi-attacher:v3.1.0
 mcr.microsoft.com/oss/kubernetes-csi/csi-node-driver-registrar:v2.2.0
 mcr.microsoft.com/oss/kubernetes-csi/csi-provisioner:v2.1.1

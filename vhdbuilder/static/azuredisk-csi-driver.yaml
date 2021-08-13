@@ -8,7 +8,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 ---
 # Source: azuredisk-csi-driver/templates/serviceaccount-csi-azuredisk-node.yaml
 apiVersion: v1
@@ -19,7 +19,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 ---
 # Source: azuredisk-csi-driver/templates/serviceaccount-csi-snapshot-controller.yaml
 apiVersion: v1
@@ -534,7 +534,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 rules:
   - apiGroups: [""]
     resources: ["persistentvolumes"]
@@ -572,7 +572,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 rules:
   - apiGroups: [""]
     resources: ["persistentvolumes"]
@@ -601,7 +601,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 rules:
   - apiGroups: [""]
     resources: ["events"]
@@ -633,7 +633,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 rules:
   - apiGroups: [""]
     resources: ["persistentvolumes"]
@@ -723,7 +723,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 subjects:
   - kind: ServiceAccount
     name: csi-azuredisk-controller-sa
@@ -741,7 +741,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 subjects:
   - kind: ServiceAccount
     name: csi-azuredisk-controller-sa
@@ -759,7 +759,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 subjects:
   - kind: ServiceAccount
     name: csi-azuredisk-controller-sa
@@ -777,7 +777,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 subjects:
   - kind: ServiceAccount
     name: csi-azuredisk-controller-sa
@@ -852,7 +852,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 spec:
   selector:
     matchLabels:
@@ -862,14 +862,14 @@ spec:
       labels:
         app.kubernetes.io/instance: "azuredisk-csi-driver"
         app.kubernetes.io/name: "azuredisk-csi-driver"
-        app.kubernetes.io/version: "v1.3.0"
+        app.kubernetes.io/version: "v1.5.1"
         app: csi-azuredisk-node-win
     spec:
       serviceAccountName: csi-azuredisk-node-sa
       tolerations:
-        - key: "node.kubernetes.io/os"
-          operator: "Exists"
-          effect: "NoSchedule"
+        - effect: NoSchedule
+          key: node.kubernetes.io/os
+          operator: Exists
       nodeSelector:
         kubernetes.io/os: windows
       affinity:
@@ -937,18 +937,19 @@ spec:
               cpu: 10m
               memory: 20Mi
         - name: azuredisk
-          image: "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.3.0.1"
+          image: "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.5.1"
           args:
             - "--v=5"
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--nodeid=$(KUBE_NODE_NAME)"
             - "--metrics-address=0.0.0.0:29605"
+            - "--drivername=disk.csi.azure.com"
+            - "--volume-attach-limit=-1"
+            - "--cloud-config-secret-name=azure-cloud-provider"
+            - "--cloud-config-secret-namespace=kube-system"
           ports:
             - containerPort: 29603
               name: healthz
-              protocol: TCP
-            - containerPort: 29605
-              name: metrics
               protocol: TCP
           livenessProbe:
             failureThreshold: 5
@@ -1034,7 +1035,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 spec:
   selector:
     matchLabels:
@@ -1044,7 +1045,7 @@ spec:
       labels:
         app.kubernetes.io/instance: "azuredisk-csi-driver"
         app.kubernetes.io/name: "azuredisk-csi-driver"
-        app.kubernetes.io/version: "v1.3.0"
+        app.kubernetes.io/version: "v1.5.1"
         app: csi-azuredisk-node
     spec:
       hostNetwork: true
@@ -1052,6 +1053,7 @@ spec:
       serviceAccountName: csi-azuredisk-node-sa
       nodeSelector:
         kubernetes.io/os: linux
+        kubernetes.io/role: agent
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -1063,7 +1065,7 @@ spec:
                       - virtual-kubelet
       priorityClassName: system-node-critical
       tolerations:
-        - operator: "Exists"      
+        - operator: Exists    
       containers:
         - name: liveness-probe
           volumeMounts:
@@ -1110,18 +1112,20 @@ spec:
               cpu: 10m
               memory: 20Mi
         - name: azuredisk
-          image: "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.3.0.1"
+          image: "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.5.1"
           args:
             - "--v=5"
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--nodeid=$(KUBE_NODE_NAME)"
             - "--metrics-address=0.0.0.0:29605"
+            - "--enable-perf-optimization=true"
+            - "--drivername=disk.csi.azure.com"
+            - "--volume-attach-limit=-1"
+            - "--cloud-config-secret-name=azure-cloud-provider"
+            - "--cloud-config-secret-namespace=kube-system"
           ports:
             - containerPort: 29603
               name: healthz
-              protocol: TCP
-            - containerPort: 29605
-              name: metrics
               protocol: TCP
           livenessProbe:
             failureThreshold: 5
@@ -1222,7 +1226,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 spec:
   replicas: 2
   selector:
@@ -1233,24 +1237,22 @@ spec:
       labels:
         app.kubernetes.io/instance: "azuredisk-csi-driver"
         app.kubernetes.io/name: "azuredisk-csi-driver"
-        app.kubernetes.io/version: "v1.3.0"
+        app.kubernetes.io/version: "v1.5.1"
         app: csi-azuredisk-controller
     spec:
       hostNetwork: true
       serviceAccountName: csi-azuredisk-controller-sa
       nodeSelector:
         kubernetes.io/os: linux
-        kubernetes.azure.com/role: master
+        kubernetes.io/role: master
       priorityClassName: system-cluster-critical
       tolerations:
-        - key: "node-role.kubernetes.io/master"
-          operator: "Equal"
-          value: "true"
-          effect: "NoSchedule"
-        - key: "node-role.kubernetes.io/controlplane"
-          operator: "Equal"
-          value: "true"
-          effect: "NoSchedule"      
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/controlplane
+          operator: Exists   
       containers:
         - name: csi-provisioner
           image: "mcr.microsoft.com/oss/kubernetes-csi/csi-provisioner:v2.1.1"
@@ -1261,6 +1263,8 @@ spec:
             - "--timeout=15s"
             - "--leader-election"
             - "--worker-threads=40"
+            - "--extra-create-metadata=true"
+            - "--strict-topology=true"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -1279,7 +1283,7 @@ spec:
           args:
             - "-v=2"
             - "-csi-address=$(ADDRESS)"
-            - "-timeout=120s"
+            - "-timeout=600s"
             - "-leader-election"
             - "-worker-threads=500"
           env:
@@ -1352,12 +1356,15 @@ spec:
               cpu: 10m
               memory: 20Mi
         - name: azuredisk
-          image: "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.3.0.1"
+          image: "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.5.1"
           args:
             - "--v=5"
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--metrics-address=0.0.0.0:29604"
             - "--disable-avset-nodes=true"
+            - "--drivername=disk.csi.azure.com"
+            - "--cloud-config-secret-name=azure-cloud-provider"
+            - "--cloud-config-secret-namespace=kube-system"
           ports:
             - containerPort: 29602
               name: healthz
@@ -1426,7 +1433,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: "azuredisk-csi-driver"
     app.kubernetes.io/name: "azuredisk-csi-driver"
-    app.kubernetes.io/version: "v1.3.0"
+    app.kubernetes.io/version: "v1.5.1"
 spec:
   replicas: 1
   selector:
@@ -1437,19 +1444,21 @@ spec:
       labels:
         app.kubernetes.io/instance: "azuredisk-csi-driver"
         app.kubernetes.io/name: "azuredisk-csi-driver"
-        app.kubernetes.io/version: "v1.3.0"
+        app.kubernetes.io/version: "v1.5.1"
         app: csi-snapshot-controller
     spec:
       serviceAccountName: csi-snapshot-controller-sa
       nodeSelector:
         kubernetes.io/os: linux
-        kubernetes.azure.com/role: master
+        kubernetes.io/role: master
       priorityClassName: system-cluster-critical
       tolerations:
-        - key: "node-role.kubernetes.io/master"
-          operator: "Equal"
-          value: "true"
-          effect: "NoSchedule"      
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/controlplane
+          operator: Exists 
       containers:
         - name: csi-snapshot-controller
           image: "mcr.microsoft.com/oss/kubernetes-csi/snapshot-controller:v3.0.3"
@@ -1473,29 +1482,32 @@ metadata:
 spec:
   attachRequired: true
   podInfoOnMount: false
+  fsGroupPolicy: File
 ---
-apiVersion: storage.k8s.io/v1beta1
+apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: default
   annotations:
     storageclass.kubernetes.io/is-default-class: "true"
 provisioner: disk.csi.azure.com
-allowVolumeExpansion: true
-volumeBindingMode: WaitForFirstConsumer
 parameters:
+  skuname: Standard_LRS
   cachingmode: ReadOnly
   kind: Managed
-  storageaccounttype: Standard_LRS
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
 ---
-apiVersion: storage.k8s.io/v1beta1
+apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: managed-premium
 provisioner: disk.csi.azure.com
-allowVolumeExpansion: true
-volumeBindingMode: WaitForFirstConsumer
 parameters:
+  skuname: Premium_LRS
   cachingmode: ReadOnly
   kind: Managed
-  storageaccounttype: Premium_LRS
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true

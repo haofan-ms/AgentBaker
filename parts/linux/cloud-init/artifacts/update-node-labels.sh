@@ -8,16 +8,19 @@ NODE_NAME=$(echo $(hostname) | tr "[:upper:]" "[:lower:]")
 
 echo "updating labels for ${NODE_NAME}"
 
-local KUBECONFIG=/var/lib/kubelet/kubeconfig
-{{if not NeedsTLSBoostraping}}
-KUBECONFIG=/etc/kubernetes/kubelet.conf
+KUBECONFIG=/var/lib/kubelet/kubeconfig
+{{if IsControlPlane}}
+KUBECONFIG=/etc/kubernetes/admin.conf
+NODE_ROLE=",kubernetes.io/role=master"
+{{else}}
+NODE_ROLE=",kubernetes.io/role=agent"
 {{end}}
 
 FORMATTED_CURRENT_NODE_LABELS=$(kubectl label --kubeconfig ${KUBECONFIG} --list=true node $NODE_NAME | sort)
 
 echo "current node labels (sorted): ${FORMATTED_CURRENT_NODE_LABELS}"
 
-FORMATTED_NODE_LABELS_TO_UPDATE=$(echo $KUBELET_NODE_LABELS | tr ',' '\n' | sort)
+FORMATTED_NODE_LABELS_TO_UPDATE=$(echo ${KUBELET_NODE_LABELS}${NODE_ROLE} | tr ',' '\n' | sort)
 
 echo "node labels to update (formatted+sorted): ${FORMATTED_NODE_LABELS_TO_UPDATE}"
 

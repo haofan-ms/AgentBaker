@@ -435,6 +435,7 @@ metadata:
   namespace: kube-system
 spec:
   clusterIP: {{DNSServiceIP}}
+#EOF
 `)
 
 func linuxCloudInitArtifactsCorednsClusterIpYamlBytes() ([]byte, error) {
@@ -466,6 +467,7 @@ patchesJson6902:
     kind: Deployment
     name: coredns
     namespace: kube-system
+#EOF
 `)
 
 func linuxCloudInitArtifactsCorednsKustomizationYamlBytes() ([]byte, error) {
@@ -493,6 +495,7 @@ var _linuxCloudInitArtifactsCorednsTolerationsYaml = []byte(`- op: add
   value:
     operator: "Exists"
     effect: NoExecute
+#EOF
 `)
 
 func linuxCloudInitArtifactsCorednsTolerationsYamlBytes() ([]byte, error) {
@@ -568,6 +571,8 @@ EXCLUDE_MASTER_FROM_STANDARD_LB={{GetVariable "excludeMasterFromStandardLB"}}
 MAXIMUM_LOADBALANCER_RULE_COUNT={{GetVariable "maximumLoadBalancerRuleCount"}}
 CONTAINER_RUNTIME={{GetParameter "containerRuntime"}}
 CLI_TOOL={{GetParameter "cliTool"}}
+CONFIG=/etc/kubernetes/kubeadm-config.yaml
+KUBECONFIG=/etc/kubernetes/admin.conf
 CONTAINERD_DOWNLOAD_URL_BASE={{GetParameter "containerdDownloadURLBase"}}
 NETWORK_MODE={{GetParameter "networkMode"}}
 KUBE_BINARY_URL={{GetParameter "kubeBinaryURL"}}
@@ -669,7 +674,52 @@ configureSecrets(){
     echo "${ETCD_PEER_CERT}" | base64 --decode > "${ETCD_PEER_CERTIFICATE_PATH}"
 }
 
+RefreshEtcdManifest() {
+    # If initial-cluster does not contains all 3 ETCD cluster
+    # Wait for the ETCD started on all nodes and update the ETCD configration by re-join the node to the cluster
+
+    extractEtcdctl || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MANIFEST
+
+    ETCD_INITIAL_CLUSTER_STRING=$(grep -E "initial-cluster=" /etc/kubernetes/manifests/etcd.yaml | grep -oE "aks-master.*")
+    echo "ETCD_INITIAL_CLUSTER_STRING $ETCD_INITIAL_CLUSTER_STRING"
+    IFS=',' read -a ETCD_INITIAL_CLUSTER_STRING_ARRAY <<< $ETCD_INITIAL_CLUSTER_STRING
+    echo "ETCD_INITIAL_CLUSTER_STRING_ARRAY Count ${#ETCD_INITIAL_CLUSTER_STRING_ARRAY[@]}"
+
+    if [ 3 !=  ${#ETCD_INITIAL_CLUSTER_STRING_ARRAY[@]} ]; then
+                ARE_ETCD_MEMBERS_READY=false
+                for i in {1..30}
+                do
+                        ETCDCTL_API=3
+                        ETCD_MEMBER_COUNT=$(retrycmd_if_failure_no_stats 10 15 300 etcdctl member list --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key | grep -c "started, aks-master")
+                        if [ $ETCD_MEMBER_COUNT == 3 ]
+                        then
+                                ARE_ETCD_MEMBERS_READY=true
+                                break
+                        fi
+                        sleep 30
+                done
+                retrycmd_if_failure_no_stats 10 15 300 etcdctl member list --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key
+                echo "ARE_ETCD_MEMBERS_READY $ARE_ETCD_MEMBERS_READY"
+                if [ "$ARE_ETCD_MEMBERS_READY" == "true" ] ; then
+                        echo "All ETCD members are ready"
+                        retrycmd_if_failure_no_stats 10 15 300 kubeadm join phase control-plane-join etcd --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MANIFEST
+                        echo "etcd manifest update is completed"
+                else
+                        echo "Some ETCD members are not ready"
+                        exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MANIFEST
+                fi
+    else
+        echo "ETCD_INITIAL_CLUSTER_STRING contains 3 members, skipping etcd manifest update"
+    fi
+}
+
 customizeK8s() {
+    wait_for_file 1200 1 /etc/kubernetes/kubeadm-config.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+    wait_for_file 1200 1 /etc/kubernetes/kustomize/coredns/cluster-ip.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+    wait_for_file 1200 1 /etc/kubernetes/kustomize/coredns/kustomization.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+    wait_for_file 1200 1 /etc/kubernetes/kustomize/coredns/tolerations.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+    # wait_for_file 1200 1 /etc/kubernetes/addons/...
+    
     mkdir -p /etc/kubernetes/pki/etcd
     cp -p /etc/kubernetes/certs/ca.crt /etc/kubernetes/pki/ca.crt
     cp -p /etc/kubernetes/pki/sa.key /etc/kubernetes/pki/sa.pub
@@ -678,6 +728,9 @@ customizeK8s() {
     cp -p /etc/kubernetes/pki/ca.crt /etc/kubernetes/pki/etcd/ca.crt
     cp -p /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/etcd/ca.key
 
+    mkdir -p /etc/kubernetes/patches
+    KubeControllerManagerPath
+
     FIRST_MASTER_NODE=true
     echo $NODE_NAME | grep -E '*-0$' > /dev/null
     if [[ "$?" != "0" ]]; then
@@ -685,51 +738,54 @@ customizeK8s() {
     fi
     if [[ -d /var/lib/etcddisk/etcd/member/ ]]; then
         FIRST_MASTER_NODE=false
-    fi
+    fi  
 
     if [ "${FIRST_MASTER_NODE}" = true ]; then
-        # times sleep timeout
-        retrycmd_if_failure 3 5 30 kubeadm init phase certs all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 3 5 30 kubeadm init phase kubeconfig all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 3 5 30 kubeadm init phase control-plane all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
-        retrycmd_if_failure 5 10 300 kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --skip-phases=control-plane,certs,kubeconfig --ignore-preflight-errors=all  -v 9
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase certs all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase kubeconfig all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase control-plane all --config ${CONFIG} --experimental-patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 300 kubeadm init --config ${CONFIG} --skip-phases=control-plane,certs,kubeconfig --ignore-preflight-errors=all -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
-        cat << EOF | retrycmd_if_failure 5 10 30 kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: nodegroup
-subjects:
-- apiGroup: rbac.authorization.k8s.io
-  kind: Group
-  name: system:nodes
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: system:node
-EOF
+        retrycmd_if_failure_no_stats 10 15 180 kubectl create clusterrolebinding nodegroup --clusterrole system:node --group system:nodes --kubeconfig ${KUBECONFIG}
+        retrycmd_if_failure_no_stats 10 15 180 kubectl create clusterrolebinding node-kubeproxy --clusterrole system:node-proxier --group system:nodes --kubeconfig ${KUBECONFIG}
 
-        retrycmd_if_failure_no_stats 5 10 30 kubectl get deploy coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml
-        retrycmd_if_failure_no_stats 5 10 30 kubectl get service kube-dns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/service.yaml
-        retrycmd_if_failure_no_stats 5 10 30 kubectl delete service kube-dns -n kube-system --kubeconfig /etc/kubernetes/admin.conf
-        retrycmd_if_failure_no_stats 5 10 30 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+        retrycmd_if_failure_no_stats 10 15 180 kubectl get deploy coredns -n kube-system --kubeconfig ${KUBECONFIG} -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml || exit $ERR_ASH_APPLY_ADDON
+        retrycmd_if_failure_no_stats 10 15 180 kubectl delete deploy coredns -n kube-system --wait=true --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
+        retrycmd_if_failure_no_stats 10 15 180 kubectl get service kube-dns -n kube-system --kubeconfig ${KUBECONFIG} -o yaml > /etc/kubernetes/kustomize/coredns/service.yaml || exit $ERR_ASH_APPLY_ADDON
+        retrycmd_if_failure_no_stats 10 15 180 kubectl delete service kube-dns -n kube-system --wait=true --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
+        retrycmd_if_failure_no_stats 10 15 180 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_APPLY_ADDON
 
         for ADDON in {{GetAddonsURI}}; do
-            retrycmd_if_failure 5 10 30 kubectl apply -f ${ADDON} --kubeconfig /etc/kubernetes/admin.conf
+            retrycmd_if_failure 10 15 180 kubectl apply -f ${ADDON} --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
         done
     else
-        retrycmd_if_failure 3 5 30 kubeadm join phase control-plane-prepare all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
-        retrycmd_if_failure 3 5 30 kubeadm join phase kubelet-start --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 5 10 300 kubeadm join phase control-plane-join all --config /etc/kubernetes/kubeadm-config.yaml -v 9
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare all --config ${CONFIG} --experimental-patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase kubelet-start --config ${CONFIG} -v 9 || exit $ERR_KUBELET_START_FAIL
+        if [[ -d /var/lib/etcddisk/etcd/member/ ]]; then
+            retrycmd_if_failure_no_stats 10 15 300 kubeadm join phase control-plane-join all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
+            retrycmd_if_failure_no_stats 10 15 180 kubectl uncordon ${NODE_NAME} --kubeconfig ${KUBECONFIG}
+        else
+            retrycmd_if_failure_no_stats 10 15 300 kubeadm join --config ${CONFIG} --skip-phases=control-plane-prepare,kubelet-start --ignore-preflight-errors=all -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
+        fi
     fi
 
-    # TODO ASH Delete
-    mkdir -p /home/${ADMINUSER}/.kube
-    cp /etc/kubernetes/admin.conf /home/${ADMINUSER}/.kube/config
-    chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube
-    chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube/config
+    RefreshEtcdManifest || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MANIFEST
+
+    # /etc/kubernetes/admin.conf is used by update-node-labels.service
+    # /etc/kubernetes/kubelet.conf does not have enought permissions
+    # we have to keep admin.conf until node labels are set by the rp, not agentbaker
+    #rm -rf /etc/kubernetes/admin.conf
+}
+
+KubeControllerManagerPath() {
+    cat << EOF > /etc/kubernetes/patches/kube-controller-manager+strategic.yaml
+spec:
+  containers:
+  - name: kube-controller-manager
+    env:
+    - name: AZURE_ENVIRONMENT_FILEPATH
+      value: /etc/kubernetes/azurestackcloud.json
+EOF
 }
 
 {{- if EnableHostsConfigAgent}}
@@ -986,7 +1042,7 @@ generateIPAMFileSource() {
 
     if [[ -z ${TOKEN} ]]; then
         echo "Error generating token for Azure Resource Manager"
-        exit 120
+        exit ${ERR_ASH_GET_ARM_TOKEN}
     fi
 
     curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X GET \
@@ -997,7 +1053,7 @@ generateIPAMFileSource() {
 
     if [[ ! -s ${NETWORK_INTERFACES_FILE} ]]; then
         echo "Error fetching network interface configuration for node"
-        exit 121
+        exit ${ERR_ASH_GET_NETWORK_CONFIGURATION}
     fi
 
     echo "Generating Azure CNI interface file"
@@ -1008,7 +1064,7 @@ generateIPAMFileSource() {
 
     if [[ -z ${SDN_INTERFACES} ]]; then
         echo "Error extracting the SDN interfaces from the network interfaces file"
-        exit 123
+        exit ${ERR_ASH_GET_SUBNET_PREFIX}
     fi
 
     AZURE_CNI_CONFIG=$(echo ${SDN_INTERFACES} | jq "{Interfaces: [.[] | {MacAddress: .properties.macAddress, IsPrimary: .properties.primary, IPSubnets: [{Prefix: .properties.ipConfigurations[0].properties.subnet.id, IPAddresses: .properties.ipConfigurations | [.[] | {Address: .properties.privateIPAddress, IsPrimary: .properties.primary}]}]}]}")
@@ -1024,7 +1080,7 @@ generateIPAMFileSource() {
 
         if [[ -z ${SUBNET_PREFIX} ]]; then
             echo "Error fetching the subnet address prefix for a subnet ID"
-            exit 122
+            exit ${ERR_ASH_GET_SUBNET_PREFIX}
         fi
 
         AZURE_CNI_CONFIG=$(echo ${AZURE_CNI_CONFIG} | sed "s|${SUBNET_ID}|${SUBNET_PREFIX}|g")
@@ -1435,13 +1491,17 @@ ERR_CRICTL_DOWNLOAD_TIMEOUT=117 {{/* Timeout waiting for crictl downloads */}}
 ERR_CRICTL_OPERATION_ERROR=118 {{/* Error executing a crictl operation */}}
 ERR_CTR_OPERATION_ERROR=119 {{/* Error executing a ctr containerd cli operation */}}
 
+{{/* Azure Stack Hub specific errors */}}
+ERR_ASH_KUBEADM_INIT_JOIN=13
+ERR_ASH_GET_ARM_TOKEN=120 {{/* Error generating a token to use with Azure Resource Manager */}}
+ERR_ASH_GET_NETWORK_CONFIGURATION=121 {{/* Error fetching the network configuration for the node */}}
+ERR_ASH_GET_SUBNET_PREFIX=122 {{/* Error fetching the subnet address prefix for a subnet ID */}}
+ERR_ASH_KUBEADM_GEN_FILES=123
+ERR_ASH_KUBEADM_REFRESH_ETCD_MANIFEST=140
+ERR_ASH_APPLY_ADDON=133
+
 ERR_VHD_FILE_NOT_FOUND=124 {{/* VHD log file not found on VM built from VHD distro */}}
 ERR_VHD_BUILD_ERROR=125 {{/* Reserved for VHD CI exit conditions */}}
-
-{{/* Azure Stack specific errors */}}
-ERR_AZURE_STACK_GET_ARM_TOKEN=120 {{/* Error generating a token to use with Azure Resource Manager */}}
-ERR_AZURE_STACK_GET_NETWORK_CONFIGURATION=121 {{/* Error fetching the network configuration for the node */}}
-ERR_AZURE_STACK_GET_SUBNET_PREFIX=122 {{/* Error fetching the subnet address prefix for a subnet ID */}}
 
 ERR_SWAP_CREAT_FAIL=130 {{/* Error allocating swap file */}}
 ERR_SWAP_CREAT_INSUFFICIENT_DISK_SPACE=131 {{/* Error insufficient disk space for swap file creation */}}
@@ -1751,7 +1811,7 @@ installDeps() {
     aptmarkWALinuxAgent hold
     apt_get_update || exit $ERR_APT_UPDATE_TIMEOUT
     apt_get_dist_upgrade || exit $ERR_APT_DIST_UPGRADE_TIMEOUT
-    for apt_package in apache2-utils apt-transport-https blobfuse=1.1.1 ca-certificates ceph-common cgroup-lite cifs-utils conntrack cracklib-runtime ebtables ethtool fuse git glusterfs-client htop iftop init-system-helpers iotop iproute2 ipset iptables jq libpam-pwquality libpwquality-tools mount nfs-common pigz socat sysfsutils sysstat traceroute util-linux xz-utils zip; do
+    for apt_package in apache2-utils apt-transport-https blobfuse=1.1.1 ca-certificates ceph-common cgroup-lite cifs-utils conntrack cracklib-runtime ebtables ethtool fuse git glusterfs-client htop iftop init-system-helpers iotop iproute2 ipset iptables jq libpam-pwquality libpwquality-tools mount nfs-common pigz socat sysfsutils sysstat traceroute util-linux xz-utils zip chrony; do
       if ! apt_get_install 30 1 600 $apt_package; then
         journalctl --no-pager -u $apt_package
         exit $ERR_APT_INSTALL_TIMEOUT
@@ -2011,6 +2071,20 @@ extractHyperkube() {
 
     cp "$path/hyperkube" "/usr/local/bin/kubelet-${KUBERNETES_VERSION}"
     mv "$path/hyperkube" "/usr/local/bin/kubectl-${KUBERNETES_VERSION}"    
+}
+
+extractEtcdctl() {
+	ETCD_URL=mcr.microsoft.com/oss/etcd-io/etcd:{{EtcdVersion}}
+    path="/tmp/etcdctl-downloads/{{EtcdVersion}}"
+    mkdir -p "$path"
+
+    if [[ "$CLI_TOOL" == "crictl" ]]; then    
+		ctr --namespace k8s.io run --rm --mount type=bind,src=$path,dst=$path,options=bind:rw ${ETCD_URL} extractTask /bin/sh -c "cp /usr/local/bin/etcdctl $path"
+    else 
+        docker run --rm --entrypoint "" -v $path:$path ${ETCD_URL} /bin/sh -c "cp /usr/local/bin/etcdctl $path"
+    fi
+
+    mv "$path/etcdctl" "/usr/local/bin/etcdctl"
 }
 
 installKubeletKubectlKubeadmAndKubeProxy() {
@@ -2762,6 +2836,61 @@ var _linuxCloudInitArtifactsInitAksCustomCloudSh = []byte(`#!/bin/bash
 # trust AzureStack root ca
 cp /var/lib/waagent/Certificates.pem /usr/local/share/ca-certificates/azsCertificate.crt
 /usr/sbin/update-ca-certificates
+
+# Disable systemd-timesyncd and install chrony and uses local time source
+systemctl stop systemd-timesyncd
+systemctl disable systemd-timesyncd
+
+cat > /etc/chrony/chrony.conf <<EOF
+# Welcome to the chrony configuration file. See chrony.conf(5) for more
+# information about usuable directives.
+
+# This will use (up to):
+# - 4 sources from ntp.ubuntu.com which some are ipv6 enabled
+# - 2 sources from 2.ubuntu.pool.ntp.org which is ipv6 enabled as well
+# - 1 source from [01].ubuntu.pool.ntp.org each (ipv4 only atm)
+# This means by default, up to 6 dual-stack and up to 2 additional IPv4-only
+# sources will be used.
+# At the same time it retains some protection against one of the entries being
+# down (compare to just using one of the lines). See (LP: #1754358) for the
+# discussion.
+#
+# About using servers from the NTP Pool Project in general see (LP: #104525).
+# Approved by Ubuntu Technical Board on 2011-02-08.
+# See http://www.pool.ntp.org/join.html for more information.
+#pool ntp.ubuntu.com        iburst maxsources 4
+#pool 0.ubuntu.pool.ntp.org iburst maxsources 1
+#pool 1.ubuntu.pool.ntp.org iburst maxsources 1
+#pool 2.ubuntu.pool.ntp.org iburst maxsources 2
+
+# This directive specify the location of the file containing ID/key pairs for
+# NTP authentication.
+keyfile /etc/chrony/chrony.keys
+
+# This directive specify the file into which chronyd will store the rate
+# information.
+driftfile /var/lib/chrony/chrony.drift
+
+# Uncomment the following line to turn logging on.
+#log tracking measurements statistics
+
+# Log files location.
+logdir /var/log/chrony
+
+# Stop bad estimates upsetting machine clock.
+maxupdateskew 100.0
+
+# This directive enables kernel synchronisation (every 11 minutes) of the
+# real-time clock. Note that it can’t be used along with the 'rtcfile' directive.
+rtcsync
+
+# Settings come from: https://docs.microsoft.com/en-us/azure/virtual-machines/linux/time-sync
+refclock PHC /dev/ptp0 poll 3 dpoll -2 offset 0
+makestep 1.0 -1
+EOF
+
+systemctl restart chrony
+
 exit
 {{end}}
 
@@ -2885,6 +3014,7 @@ data:
       - 168.63.129.16/32{{end}}
     masqLinkLocal: {{IsAzureCNI}}
     resyncInterval: 60s
+#EOF
 `)
 
 func linuxCloudInitArtifactsIpMasqAgentConfigmapYamlBytes() ([]byte, error) {
@@ -2946,6 +3076,10 @@ etcd:
     imageRepository: mcr.microsoft.com/oss/etcd-io
     imageTag: {{EtcdVersion}}
     dataDir: /var/lib/etcddisk/etcd
+    extraArgs:
+      election-timeout: "2500"
+      heartbeat-interval: "250"
+      snapshot-count: "5000"
 networking:
   podSubnet: {{PodCIDR}}
   serviceSubnet: {{ServiceCidr}}
@@ -3009,6 +3143,7 @@ bootstrapTokens:
   groups:
   - system:bootstrappers:kubeadm:default-node-token
 nodeRegistration:
+  criSocket: /run/containerd/containerd.sock
   taints:
   - effect: NoSchedule
     key: node-role.kubernetes.io/master
@@ -3027,6 +3162,7 @@ localAPIEndpoint:
 apiVersion: kubeadm.k8s.io/v1beta2
 kind: JoinConfiguration
 nodeRegistration:
+  criSocket: /run/containerd/containerd.sock
   taints:
   - effect: NoSchedule
     key: node-role.kubernetes.io/master
@@ -3976,16 +4112,19 @@ NODE_NAME=$(echo $(hostname) | tr "[:upper:]" "[:lower:]")
 
 echo "updating labels for ${NODE_NAME}"
 
-local KUBECONFIG=/var/lib/kubelet/kubeconfig
-{{if not NeedsTLSBoostraping}}
-KUBECONFIG=/etc/kubernetes/kubelet.conf
+KUBECONFIG=/var/lib/kubelet/kubeconfig
+{{if IsControlPlane}}
+KUBECONFIG=/etc/kubernetes/admin.conf
+NODE_ROLE=",kubernetes.io/role=master"
+{{else}}
+NODE_ROLE=",kubernetes.io/role=agent"
 {{end}}
 
 FORMATTED_CURRENT_NODE_LABELS=$(kubectl label --kubeconfig ${KUBECONFIG} --list=true node $NODE_NAME | sort)
 
 echo "current node labels (sorted): ${FORMATTED_CURRENT_NODE_LABELS}"
 
-FORMATTED_NODE_LABELS_TO_UPDATE=$(echo $KUBELET_NODE_LABELS | tr ',' '\n' | sort)
+FORMATTED_NODE_LABELS_TO_UPDATE=$(echo ${KUBELET_NODE_LABELS}${NODE_ROLE} | tr ',' '\n' | sort)
 
 echo "node labels to update (formatted+sorted): ${FORMATTED_NODE_LABELS_TO_UPDATE}"
 
@@ -4104,7 +4243,6 @@ write_files:
   content: !!binary |
     {{GetVariableProperty "cloudInitData" "kubeletSystemdService"}}
 
-{{- if not .IsVHDDistro}}
 - path: /etc/systemd/system/update-node-labels.service
   permissions: "0644"
   encoding: gzip
@@ -4118,7 +4256,6 @@ write_files:
   owner: root
   content: !!binary |
     {{GetVariableProperty "cloudInitData" "updateNodeLabelsScript"}}
-{{end}}
 
 {{if not .IsVHDDistro}}
 - path: /usr/local/bin/health-monitor.sh
@@ -4207,7 +4344,7 @@ write_files:
     {{GetVariableProperty "cloudInitData" "dhcpv6ConfigurationScript"}}
 {{end}}
 
-{{if RequiresDocker}}
+{{if NeedsDocker}}
     {{if not .IsVHDDistro}}
 - path: /etc/systemd/system/docker.service.d/clear_mount_propagation_flags.conf
   permissions: "0644"
@@ -5721,7 +5858,7 @@ try
         Register-NodeLabelSyncScriptTask
         Update-DefenderPreferences
 
-        Check-APIServerConnectivity -MasterIP $MasterIP
+        Check-APIServerConnectivity -MasterIP $MasterIP -RetryInterval 10 -ConnectTimeout 3 -MaxRetryCount 360
 
         if ($global:WindowsCalicoPackageURL) {
             Write-Log "Start calico installation"

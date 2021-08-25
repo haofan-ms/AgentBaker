@@ -475,7 +475,7 @@ try
         Register-NodeLabelSyncScriptTask
         Update-DefenderPreferences
 
-        Check-APIServerConnectivity -MasterIP $MasterIP
+        Check-APIServerConnectivity -MasterIP $MasterIP -RetryInterval 10 -ConnectTimeout 3 -MaxRetryCount 360
 
         if ($global:WindowsCalicoPackageURL) {
             Write-Log "Start calico installation"

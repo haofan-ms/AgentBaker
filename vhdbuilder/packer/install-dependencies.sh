@@ -507,11 +507,7 @@ done
 
 # NOTE that we only keep the latest one per k8s patch version as kubelet/kubectl is decided by VHD version
 K8S_VERSIONS="
-1.17.17-azs
-1.18.18-azs
-1.19.10-azs
 1.19.11-azs-hotfix.20210831
-1.20.6-azs
 1.20.7-azs-hotfix.20210831
 "
 for PATCHED_KUBERNETES_VERSION in ${K8S_VERSIONS}; do
@@ -551,12 +547,8 @@ ls -ltr /usr/local/bin/* >> ${VHD_LOGS_FILEPATH}
 
 # NOTE that we keep multiple files per k8s patch version as kubeproxy version is decided by CCP.
 PATCHED_HYPERKUBE_IMAGES="
-1.17.17-azs
-1.18.18-azs
-1.19.10-azs
-1.19.11-azs-hotfix.20210831
-1.20.6-azs
-1.20.7-azs-hotfix.20210831
+1.19.11
+1.20.7
 "
 for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
   # Only need to store k8s components >= 1.19 for containerd VHDs
@@ -565,7 +557,7 @@ for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
   fi
   # TODO: after CCP chart is done, change below to get hyperkube only for versions less than 1.17 only
   if (($(echo ${KUBERNETES_VERSION} | cut -d"." -f2) < 19)); then
-      CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/hyperkube:v${KUBERNETES_VERSION}"
+      CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/hyperkube:v${KUBERNETES_VERSION}-azs-hotfix.20210831"
       pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
       echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
       if [[ ${cliTool} == "docker" ]]; then
@@ -588,8 +580,10 @@ for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
       else
       KUBERNETES_VERSION=`echo ${KUBERNETES_VERSION} | cut -d"." -f1,2,3`;
       fi
-      CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/kube-proxy:v${KUBERNETES_VERSION}"
+      CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/kube-proxy:v${KUBERNETES_VERSION}-azs-hotfix.20210831"
+      NEW_IMAGE_TAG="mcr.microsoft.com/oss/kubernetes/kube-proxy:v${KUBERNETES_VERSION}-azs"
       pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+      tagContainerImage ${cliTool} ${CONTAINER_IMAGE} ${NEW_IMAGE_TAG}
       if [[ ${cliTool} == "docker" ]]; then
           docker run --rm --entrypoint "" ${CONTAINER_IMAGE} /bin/sh -c "iptables --version" | grep -v nf_tables && echo "kube-proxy contains no nf_tables"
       else
@@ -609,8 +603,10 @@ for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
     else
     KUBERNETES_VERSION=`echo ${KUBERNETES_VERSION} | cut -d"." -f1,2,3`;
     fi
-    CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/${component}:v${KUBERNETES_VERSION}"
+    CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/${component}:v${KUBERNETES_VERSION}-azs-hotfix.20210831"
+    NEW_IMAGE_TAG="mcr.microsoft.com/oss/kubernetes/${component}:v${KUBERNETES_VERSION}-azs"
     pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+    tagContainerImage ${cliTool} ${CONTAINER_IMAGE} ${NEW_IMAGE_TAG}
     echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
   done
 done

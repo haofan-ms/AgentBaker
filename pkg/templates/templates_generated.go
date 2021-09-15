@@ -1399,6 +1399,8 @@ ERR_KUBELET_START_FAIL=34 {{/* kubelet could not be started by systemctl */}}
 ERR_DOCKER_IMG_PULL_TIMEOUT=35 {{/* Timeout trying to pull a Docker image */}}
 ERR_CONTAINERD_CTR_IMG_PULL_TIMEOUT=36 {{/* Timeout trying to pull a containerd image via cli tool ctr */}}
 ERR_CONTAINERD_CRICTL_IMG_PULL_TIMEOUT=37 {{/* Timeout trying to pull a containerd image via cli tool crictl */}}
+ERR_DOCKER_IMG_TAG_TIMEOUT=38 {{/* Timeout trying to tag a Docker image */}}
+ERR_CONTAINERD_CTR_IMG_TAG_TIMEOUT=39 {{/* Timeout trying to tag a containerd image via cli tool ctr */}}
 ERR_CNI_DOWNLOAD_TIMEOUT=41 {{/* Timeout waiting for CNI downloads */}}
 ERR_MS_PROD_DEB_DOWNLOAD_TIMEOUT=42 {{/* Timeout waiting for https://packages.microsoft.com/config/ubuntu/16.04/packages-microsoft-prod.deb */}}
 ERR_MS_PROD_DEB_PKG_ADD_FAIL=43 {{/* Failed to add repo pkg file */}}
@@ -2048,6 +2050,17 @@ pullContainerImage() {
         retrycmd_if_failure 60 1 1200 crictl pull $CONTAINER_IMAGE_URL || ( echo "timed out pulling image ${CONTAINER_IMAGE_URL} via crictl" && exit $ERR_CONTAINERD_CRICTL_IMG_PULL_TIMEOUT )
     else
         retrycmd_if_failure 60 1 1200 docker pull $CONTAINER_IMAGE_URL || ( echo "timed out pulling image ${CONTAINER_IMAGE_URL} via docker" && exit $ERR_DOCKER_IMG_PULL_TIMEOUT )
+    fi
+}
+
+tagContainerImage() {
+    CLI_TOOL=$1
+    CONTAINER_IMAGE_URL=$2
+    NEW_IMAGE_TAG=$3
+    if [[ ${CLI_TOOL} == "ctr" ]]; then
+        retrycmd_if_failure 60 1 1200 ctr --namespace k8s.io image tag $CONTAINER_IMAGE_URL $NEW_IMAGE_TAG --force  || ( echo "timed out tagging image ${CONTAINER_IMAGE_URL} to ${NEW_IMAGE_TAG} via ctr" && exit $ERR_CONTAINERD_CTR_IMG_TAG_TIMEOUT )
+    else
+        retrycmd_if_failure 60 1 1200 docker tag $CONTAINER_IMAGE_URL $NEW_IMAGE_TAG || ( echo "timed out tagging image ${CONTAINER_IMAGE_URL} to ${NEW_IMAGE_TAG} via docker" && exit $ERR_DOCKER_IMG_TAG_TIMEOUT )
     fi
 }
 

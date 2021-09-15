@@ -333,6 +333,17 @@ pullContainerImage() {
     fi
 }
 
+tagContainerImage() {
+    CLI_TOOL=$1
+    CONTAINER_IMAGE_URL=$2
+    NEW_IMAGE_TAG=$3
+    if [[ ${CLI_TOOL} == "ctr" ]]; then
+        retrycmd_if_failure 60 1 1200 ctr --namespace k8s.io image tag $CONTAINER_IMAGE_URL $NEW_IMAGE_TAG --force  || ( echo "timed out tagging image ${CONTAINER_IMAGE_URL} to ${NEW_IMAGE_TAG} via ctr" && exit $ERR_CONTAINERD_CTR_IMG_TAG_TIMEOUT )
+    else
+        retrycmd_if_failure 60 1 1200 docker tag $CONTAINER_IMAGE_URL $NEW_IMAGE_TAG || ( echo "timed out tagging image ${CONTAINER_IMAGE_URL} to ${NEW_IMAGE_TAG} via docker" && exit $ERR_DOCKER_IMG_TAG_TIMEOUT )
+    fi
+}
+
 removeContainerImage() {
     CLI_TOOL=$1
     CONTAINER_IMAGE_URL=$2

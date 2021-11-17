@@ -119,6 +119,7 @@ function Get-FilesToCacheOnVHD {
 
         foreach ($URL in $map[$dir]) {
             $fileName = [IO.Path]::GetFileName($URL)
+            $fileName = $fileName.Replace('-hotfix.20210831', '')
             # Do not cache containerd package on docker VHD
             if ($containerRuntime -ne 'containerd' -And $dir -eq "c:\akse-cache\containerd\") {
                 Write-Log "Skip to download $URL for docker VHD"

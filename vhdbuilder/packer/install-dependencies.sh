@@ -171,7 +171,7 @@ string_replace() {
 }
 
 container_image_url_trim() {
-  echo $1 | sed -e s/'-hotfix.20210831'$//
+  echo ${1//'-hotfix.20210831'/}
 }
 
 ContainerImages=$(jq ".ContainerImages" $COMPONENTS_FILEPATH | jq .[] --monochrome-output --compact-output)

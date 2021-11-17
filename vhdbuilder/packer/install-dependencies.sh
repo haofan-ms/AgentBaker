@@ -170,6 +170,10 @@ string_replace() {
   echo ${1//\*/$2}
 }
 
+container_image_url_trim() {
+  echo $1 | sed -e s/'-hotfix.20210831'$//
+}
+
 ContainerImages=$(jq ".ContainerImages" $COMPONENTS_FILEPATH | jq .[] --monochrome-output --compact-output)
 for imageToBePulled in ${ContainerImages[*]}; do
   downloadURL=$(echo "${imageToBePulled}" | jq .downloadURL -r)
@@ -178,6 +182,10 @@ for imageToBePulled in ${ContainerImages[*]}; do
   for version in ${versions}; do
     CONTAINER_IMAGE=$(string_replace $downloadURL $version)
     pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+    if [[ $CONTAINER_IMAGE =~ "hotfix" ]]; then
+      NEW_CONTAINER_IMAGE=$(container_image_url_trim $CONTAINER_IMAGE)
+      retagContainerImage ${cliTool} ${CONTAINER_IMAGE} ${NEW_CONTAINER_IMAGE}
+    fi
     echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
   done
 done
@@ -334,6 +342,10 @@ for KUBE_PROXY_IMAGE_VERSION in ${KUBE_PROXY_IMAGE_VERSIONS}; do
   # use kube-proxy as well
   CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/kube-proxy:v${KUBE_PROXY_IMAGE_VERSION}"
   pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+  if [[ $CONTAINER_IMAGE =~ "hotfix" ]]; then
+    NEW_CONTAINER_IMAGE=$(container_image_url_trim $CONTAINER_IMAGE)
+    retagContainerImage ${cliTool} ${CONTAINER_IMAGE} ${NEW_CONTAINER_IMAGE}
+  fi
   if [[ ${cliTool} == "docker" ]]; then
       docker run --rm --entrypoint "" ${CONTAINER_IMAGE} /bin/sh -c "iptables --version" | grep -v nf_tables && echo "kube-proxy contains no nf_tables"
   else

@@ -585,7 +585,9 @@ for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
       KUBERNETES_VERSION=`echo ${KUBERNETES_VERSION} | cut -d"." -f1,2,3`;
       fi
       CONTAINER_IMAGE="upstream.azurecr.io/oss/kubernetes/kube-proxy:v${KUBERNETES_VERSION}"
+      NEW_IMAGE_TAG="mcr.microsoft.com/oss/kubernetes/kube-proxy:v${KUBERNETES_VERSION}"
       pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+      retagContainerImage ${cliTool} ${CONTAINER_IMAGE} ${NEW_IMAGE_TAG}
       if [[ ${cliTool} == "docker" ]]; then
           docker run --rm --entrypoint "" ${CONTAINER_IMAGE} /bin/sh -c "iptables --version" | grep -v nf_tables && echo "kube-proxy contains no nf_tables"
       else
@@ -606,7 +608,9 @@ for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
     KUBERNETES_VERSION=`echo ${KUBERNETES_VERSION} | cut -d"." -f1,2,3`;
     fi
     CONTAINER_IMAGE="upstream.azurecr.io/oss/kubernetes/${component}:v${KUBERNETES_VERSION}"
+    NEW_IMAGE_TAG="mcr.microsoft.com/oss/kubernetes/${component}:v${KUBERNETES_VERSION}"
     pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+    retagContainerImage ${cliTool} ${CONTAINER_IMAGE} ${NEW_IMAGE_TAG}
     echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
   done
 done

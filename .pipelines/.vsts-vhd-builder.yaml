@@ -30,7 +30,6 @@ variables:
 phases:
   - phase: build_vhd
     queue:
-      name: Hosted Ubuntu 1604
       timeoutInMinutes: 180
     steps:
       - bash: |

@@ -69,12 +69,9 @@ function Test-FilesToCacheOnVHD
         # we don't resue the code the validate the winzip used for different container runtimes, but use the real list to
         # validat the code and winzip downloaded.
         "c:\akse-cache\win-k8s-docker\" = @(
-            "https://kubernetesartifacts.azureedge.net/kubernetes/v1.17.17-azs/windowszip/v1.17.17-azs-1int.zip",
-            "https://kubernetesartifacts.azureedge.net/kubernetes/v1.18.18-azs/windowszip/v1.18.18-azs-1int.zip",
-            "https://kubernetesartifacts.azureedge.net/kubernetes/v1.19.10-azs/windowszip/v1.19.10-azs-1int.zip",
-            "https://kubernetesartifacts.azureedge.net/kubernetes/v1.19.11-azs-hotfix.20210831/windowszip/v1.19.11-azs-hotfix.20210831-1int.zip",
-            "https://kubernetesartifacts.azureedge.net/kubernetes/v1.20.6-azs/windowszip/v1.20.6-azs-1int.zip"
-            "https://kubernetesartifacts.azureedge.net/kubernetes/v1.20.7-azs-hotfix.20210831/windowszip/v1.20.7-azs-hotfix.20210831-1int.zip"
+            "https://kubernetesartifacts.azureedge.net/kubernetes/v1.20.7-azs-hotfix.20210831/windowszip/v1.20.7-azs-hotfix.20210831-1int.zip",
+            "https://kubernetesreleases.blob.core.windows.net/kubernetes/v1.20.13-azs/windowszip/v1.20.13-azs-1int.zip",
+            "https://kubernetesreleases.blob.core.windows.net/kubernetes/v1.21.7-azs/windowszip/v1.21.7-azs-1int.zip"
         );
         # Please add new winzips with Kuberentes version >= 1.20 here
         "c:\akse-cache\win-k8s-docker-and-containerd\" = @(

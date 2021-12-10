@@ -204,6 +204,7 @@ MCR_PAUSE_VERSIONS="
 1.3.1
 1.4.0
 3.2
+3.4.1
 "
 for PAUSE_VERSION in ${MCR_PAUSE_VERSIONS}; do
     CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/pause:${PAUSE_VERSION}"
@@ -214,6 +215,7 @@ done
 # https://github.com/kubernetes/kubernetes/blob/v1.18.10/cmd/kubeadm/app/constants/constants.go#L340
 # https://github.com/kubernetes/kubernetes/blob/v1.18.15/cmd/kubeadm/app/constants/constants.go#L343
 CORE_DNS_VERSIONS="
+1.8.0
 1.7.0
 1.6.7
 1.6.6
@@ -223,8 +225,15 @@ CORE_DNS_VERSIONS="
 1.2.6
 "
 for CORE_DNS_VERSION in ${CORE_DNS_VERSIONS}; do
-    CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/coredns:${CORE_DNS_VERSION}"
-    pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+    if [[ $CORE_DNS_VERSION == "1.8.0" ]]; then
+      CONTAINER_IMAGE="coredns/coredns:${CORE_DNS_VERSION}"
+      NEW_IMAGE_TAG="mcr.microsoft.com/oss/kubernetes/coredns:v${CORE_DNS_VERSION}"
+      pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+      retagContainerImage ${cliTool} ${CONTAINER_IMAGE} ${NEW_IMAGE_TAG}
+    else
+      CONTAINER_IMAGE="mcr.microsoft.com/oss/kubernetes/coredns:${CORE_DNS_VERSION}"
+      pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
+    fi
     echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
 done
 

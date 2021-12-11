@@ -226,7 +226,7 @@ CORE_DNS_VERSIONS="
 "
 for CORE_DNS_VERSION in ${CORE_DNS_VERSIONS}; do
     if [[ $CORE_DNS_VERSION == "1.8.0" ]]; then
-      CONTAINER_IMAGE="coredns/coredns:${CORE_DNS_VERSION}"
+      CONTAINER_IMAGE="docker.io/coredns/coredns:${CORE_DNS_VERSION}"
       NEW_IMAGE_TAG="mcr.microsoft.com/oss/kubernetes/coredns:v${CORE_DNS_VERSION}"
       pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
       retagContainerImage ${cliTool} ${CONTAINER_IMAGE} ${NEW_IMAGE_TAG}

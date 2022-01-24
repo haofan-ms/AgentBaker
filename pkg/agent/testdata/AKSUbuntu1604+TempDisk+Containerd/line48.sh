@@ -132,6 +132,7 @@ installStandaloneContainerd() {
     CURRENT_COMMIT=$(containerd -version | cut -d " " -f 4)
     echo "Before installing containerd, containerd version: ${CURRENT_VERSION}, commit: ${CURRENT_COMMIT}"
 
+    CONTAINERD_PACKAGE_URL="${CONTAINERD_PACKAGE_URL:=}"
     # the user-defined package url is always picked first, and the others options won't tried when this one fails
     if [[ ! -z ${CONTAINERD_PACKAGE_URL} ]]; then
         echo "Installing containerd from user input: ${CONTAINERD_PACKAGE_URL}"
@@ -224,6 +225,7 @@ ensureRunc() {
     CURRENT_VERSION=$(runc --version | head -n1 | sed 's/runc version //')
     echo "Before installing runc, runc version: ${CURRENT_VERSION}"
 
+    RUNC_PACKAGE_URL="${RUNC_PACKAGE_URL:=}"
     # the user-defined runc package url is always picked first, and the others options won't tried when this one fails
     if [[ ! -z ${RUNC_PACKAGE_URL} ]]; then
         echo "Installing runc from user input: ${RUNC_PACKAGE_URL}"

@@ -147,6 +147,7 @@ ensureRunc() {
     CURRENT_VERSION=$(runc --version | head -n1 | sed 's/runc version //')
     echo "Before installing runc, runc version: ${CURRENT_VERSION}"
 
+    RUNC_PACKAGE_URL="${RUNC_PACKAGE_URL:=}"
     # the user-defined runc package url is always picked first, and the others options won't tried when this one fails
     if [[ ! -z ${RUNC_PACKAGE_URL} ]]; then
         echo "Installing runc from user input: ${RUNC_PACKAGE_URL}"

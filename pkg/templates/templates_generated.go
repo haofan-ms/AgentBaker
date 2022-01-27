@@ -4,6 +4,7 @@
 // linux/cloud-init/artifacts/bind-mount.service
 // linux/cloud-init/artifacts/bind-mount.sh
 // linux/cloud-init/artifacts/cis.sh
+// linux/cloud-init/artifacts/cloud-controller-manager.yaml
 // linux/cloud-init/artifacts/containerd-monitor.service
 // linux/cloud-init/artifacts/containerd-monitor.timer
 // linux/cloud-init/artifacts/coredns.yaml
@@ -316,6 +317,87 @@ func linuxCloudInitArtifactsCisSh() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "linux/cloud-init/artifacts/cis.sh", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _linuxCloudInitArtifactsCloudControllerManagerYaml = []byte(`apiVersion: v1
+kind: Pod
+metadata:
+  name: cloud-controller-manager
+  namespace: kube-system
+  labels:
+    tier: control-plane
+    component: cloud-controller-manager
+spec:
+  priorityClassName: system-node-critical
+  hostNetwork: true
+  containers:
+    - name: cloud-controller-manager
+      image: "mcr.microsoft.com/oss/kubernetes/azure-cloud-controller-manager:v1.1.4"
+      imagePullPolicy: IfNotPresent
+      env:
+      - name: AZURE_ENVIRONMENT_FILEPATH
+        value: /etc/kubernetes/azurestackcloud.json
+      - name: AZURE_GO_SDK_LOG_LEVEL
+        value: INFO
+      command: ["cloud-controller-manager"]
+      args:
+        - "--allocate-node-cidrs={{not IsAzureCNI}}"
+        - "--cloud-config=/etc/kubernetes/azure.json"
+        - "--cloud-provider=azure"
+        - "--cluster-cidr={{PodCIDR}}"
+        - "--cluster-name={{ClusterName}}"
+        - "--configure-cloud-routes={{not IsAzureCNI}}"
+        - "--controllers=*,-cloud-node"
+        - "--kubeconfig=/etc/kubernetes/admin.conf"
+        - "--leader-elect=true"
+        - "--route-reconciliation-period=10s"
+        - "--v=2"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 4
+          memory: 2Gi
+      volumeMounts:
+      - name: etc-kubernetes
+        mountPath: /etc/kubernetes
+      - name: etc-ssl
+        mountPath: /etc/ssl
+        readOnly: true
+      - name: var-lib-kubelet
+        mountPath: /var/lib/kubelet
+      - name: msi
+        mountPath: /var/lib/waagent/ManagedIdentity-Settings
+        readOnly: true
+  volumes:
+    - name: etc-kubernetes
+      hostPath:
+        path: /etc/kubernetes
+    - name: etc-ssl
+      hostPath:
+        path: /etc/ssl
+    - name: var-lib-kubelet
+      hostPath:
+        path: /var/lib/kubelet
+    - name: msi
+      hostPath:
+        path: /var/lib/waagent/ManagedIdentity-Settings
+`)
+
+func linuxCloudInitArtifactsCloudControllerManagerYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsCloudControllerManagerYaml, nil
+}
+
+func linuxCloudInitArtifactsCloudControllerManagerYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsCloudControllerManagerYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/cloud-controller-manager.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -5977,6 +6059,14 @@ write_files:
 {{- end}}
     #EOF
 
+{{if UseExternalCloudProvider}}
+- path: /etc/kubernetes/kubeadm-config.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "kubeadmconfig"}}
+
 {{if IsControlPlane}}
 - path: /etc/kubernetes/kubeadm-config.yaml
   permissions: "0600"
@@ -9058,6 +9148,7 @@ var _bindata = map[string]func() (*asset, error){
 	"linux/cloud-init/artifacts/bind-mount.service":                        linuxCloudInitArtifactsBindMountService,
 	"linux/cloud-init/artifacts/bind-mount.sh":                             linuxCloudInitArtifactsBindMountSh,
 	"linux/cloud-init/artifacts/cis.sh":                                    linuxCloudInitArtifactsCisSh,
+	"linux/cloud-init/artifacts/cloud-controller-manager.yaml":             linuxCloudInitArtifactsCloudControllerManagerYaml,
 	"linux/cloud-init/artifacts/containerd-monitor.service":                linuxCloudInitArtifactsContainerdMonitorService,
 	"linux/cloud-init/artifacts/containerd-monitor.timer":                  linuxCloudInitArtifactsContainerdMonitorTimer,
 	"linux/cloud-init/artifacts/coredns.yaml":                              linuxCloudInitArtifactsCorednsYaml,
@@ -9176,6 +9267,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 				"bind-mount.service":                        &bintree{linuxCloudInitArtifactsBindMountService, map[string]*bintree{}},
 				"bind-mount.sh":                             &bintree{linuxCloudInitArtifactsBindMountSh, map[string]*bintree{}},
 				"cis.sh":                                    &bintree{linuxCloudInitArtifactsCisSh, map[string]*bintree{}},
+				"cloud-controller-manager.yaml":             &bintree{linuxCloudInitArtifactsCloudControllerManagerYaml, map[string]*bintree{}},
 				"containerd-monitor.service":                &bintree{linuxCloudInitArtifactsContainerdMonitorService, map[string]*bintree{}},
 				"containerd-monitor.timer":                  &bintree{linuxCloudInitArtifactsContainerdMonitorTimer, map[string]*bintree{}},
 				"coredns.yaml":                              &bintree{linuxCloudInitArtifactsCorednsYaml, map[string]*bintree{}},

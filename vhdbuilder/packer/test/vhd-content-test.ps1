@@ -181,7 +181,7 @@ function Test-ImagesPulled
                 "mcr.microsoft.com/oss/kubernetes-csi/csi-node-driver-registrar:v2.0.1",
                 "mcr.microsoft.com/oss/kubernetes-csi/csi-node-driver-registrar:v2.2.0",
                 "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.5.1",
-                "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.23.3",
+                "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.1.4",
                 "mcr.microsoft.com/oss/kubernetes-csi/secrets-store/driver:v0.0.19",
                 "mcr.microsoft.com/oss/azure/secrets-store/provider-azure:0.0.12",
                 "mcr.microsoft.com/k8s/csi/azuredisk-csi:v1.0.0",

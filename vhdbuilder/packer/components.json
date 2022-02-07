@@ -278,13 +278,13 @@
     {
       "downloadURL": "mcr.microsoft.com/oss/kubernetes/azure-cloud-controller-manager:*",
       "versions": [
-        "v1.23.3"
+        "v1.1.4"
       ]
     },
     {
       "downloadURL": "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:*",
       "versions": [
-        "v1.23.3"
+        "v1.1.4"
       ]
     },
     {

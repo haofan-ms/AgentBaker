@@ -808,6 +808,7 @@ write_files:
   owner: root
   content: !!binary |
     {{GetVariableProperty "cloudInitData" "cloudcontrollermanager"}}
+{{end}}
 
 {{if IsControlPlane}}
 - path: /etc/kubernetes/kubeadm-config.yaml

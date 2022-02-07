@@ -334,7 +334,7 @@ spec:
   hostNetwork: true
   containers:
     - name: cloud-controller-manager
-      image: "mcr.microsoft.com/oss/kubernetes/azure-cloud-controller-manager:v1.23.3"
+      image: "mcr.microsoft.com/oss/kubernetes/azure-cloud-controller-manager:v1.1.4"
       imagePullPolicy: IfNotPresent
       env:
       - name: AZURE_ENVIRONMENT_FILEPATH
@@ -3496,7 +3496,7 @@ etcd:
 networking:
   podSubnet: {{PodCIDR}}
   serviceSubnet: {{ServiceCidr}}
-kubernetesVersion: {{KubernetesVersion}}
+kubernetesVersion: v{{KubernetesVersion}}-azs
 controlPlaneEndpoint: {{GetKubernetesEndpoint}}
 apiServer:
   extraArgs:
@@ -6066,6 +6066,7 @@ write_files:
   owner: root
   content: !!binary |
     {{GetVariableProperty "cloudInitData" "cloudcontrollermanager"}}
+{{end}}
 
 {{if IsControlPlane}}
 - path: /etc/kubernetes/kubeadm-config.yaml

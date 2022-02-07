@@ -802,12 +802,12 @@ write_files:
     #EOF
 
 {{if UseExternalCloudProvider}}
-- path: /etc/kubernetes/kubeadm-config.yaml
+- path: /etc/kubernetes/manifest/cloud-controller-manager.yaml
   permissions: "0600"
   encoding: gzip
   owner: root
   content: !!binary |
-    {{GetVariableProperty "cloudInitData" "kubeadmconfig"}}
+    {{GetVariableProperty "cloudInitData" "cloudcontrollermanager"}}
 
 {{if IsControlPlane}}
 - path: /etc/kubernetes/kubeadm-config.yaml

@@ -334,7 +334,7 @@ spec:
   hostNetwork: true
   containers:
     - name: cloud-controller-manager
-      image: "mcr.microsoft.com/oss/kubernetes/azure-cloud-controller-manager:v1.1.4"
+      image: "mcr.microsoft.com/oss/kubernetes/azure-cloud-controller-manager:v1.23.3"
       imagePullPolicy: IfNotPresent
       env:
       - name: AZURE_ENVIRONMENT_FILEPATH
@@ -480,7 +480,7 @@ spec:
       - args:
         - -conf
         - /etc/coredns/Corefile
-        image: mcr.microsoft.com/oss/kubernetes/coredns:1.7.0
+        image: mcr.microsoft.com/oss/kubernetes/coredns:1.8.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 5
@@ -6060,12 +6060,12 @@ write_files:
     #EOF
 
 {{if UseExternalCloudProvider}}
-- path: /etc/kubernetes/kubeadm-config.yaml
+- path: /etc/kubernetes/manifest/cloud-controller-manager.yaml
   permissions: "0600"
   encoding: gzip
   owner: root
   content: !!binary |
-    {{GetVariableProperty "cloudInitData" "kubeadmconfig"}}
+    {{GetVariableProperty "cloudInitData" "cloudcontrollermanager"}}
 
 {{if IsControlPlane}}
 - path: /etc/kubernetes/kubeadm-config.yaml

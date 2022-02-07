@@ -42,7 +42,7 @@ switch ($windowsSKU) {
             "mcr.microsoft.com/oss/kubernetes-csi/azurefile-csi:v1.5.0",
             "mcr.microsoft.com/oss/kubernetes-csi/secrets-store/driver:v0.0.21",
             "mcr.microsoft.com/oss/azure/secrets-store/provider-azure:0.0.14",
-            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.1.4", # for k8s 1.22.x
+            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.23.3", # for k8s 1.22.x
             "mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021",
             "mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021-2")
     }
@@ -57,7 +57,7 @@ switch ($windowsSKU) {
             "mcr.microsoft.com/oss/kubernetes-csi/azurefile-csi:v1.4.0",
             "mcr.microsoft.com/oss/kubernetes-csi/secrets-store/driver:v0.0.21",
             "mcr.microsoft.com/oss/azure/secrets-store/provider-azure:0.0.14",
-            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.1.4", # for k8s 1.22.x
+            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.23.3", # for k8s 1.22.x
             "mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021-2")
     }
     default {
@@ -113,7 +113,8 @@ $global:map = @{
     "c:\akse-cache\win-k8s\"      = @(
         "https://kubernetesartifacts.azureedge.net/kubernetes/v1.20.13-azs/windowszip/v1.20.13-azs-1int.zip",
         "https://kubernetesartifacts.azureedge.net/kubernetes/v1.21.7-azs/windowszip/v1.21.7-azs-1int.zip",
-        "https://kubernetesartifacts.azureedge.net/kubernetes/v1.22.4/windowszip/v1.22.4-1int.zip"
+        "https://kubernetesartifacts.azureedge.net/kubernetes/v1.22.6/windowszip/v1.22.6-1int.zip",
+        "https://kubernetesartifacts.azureedge.net/kubernetes/v1.23.3/windowszip/v1.23.3-1int.zip"
     );
     "c:\akse-cache\win-vnet-cni\" = @(
         "https://acs-mirror.azureedge.net/azure-cni/v1.2.7/binaries/azure-vnet-cni-singletenancy-windows-amd64-v1.2.7.zip",

@@ -99,6 +99,7 @@ const (
 	kubernetesHealthMonitorScript     = "linux/cloud-init/artifacts/health-monitor.sh"
 	// kubernetesKubeletMonitorSystemdTimer     = "linux/cloud-init/artifacts/kubelet-monitor.timer" // TODO enable
 	kubeadmConfig                             = "linux/cloud-init/artifacts/kubeadm-config.yaml"
+	cloudControllerManager                    = "linux/cloud-init/artifacts/cloud-controller-manager.yaml"
 	ipMasqAgentConfigmap                      = "linux/cloud-init/artifacts/ip-masq-agent-configmap.yaml"
 	corednsAddonManifest                      = "linux/cloud-init/artifacts/coredns.yaml"
 	kubeproxyAddonManifest                    = "linux/cloud-init/artifacts/kube-proxy.yaml"
@@ -149,7 +150,6 @@ const (
 	kubeSchedulerManifestFilename               = "kubernetesmaster-kube-scheduler.yaml"
 	kubeControllerManagerManifestFilename       = "kubernetesmaster-kube-controller-manager.yaml"
 	kubeControllerManagerCustomManifestFilename = "kubernetesmaster-kube-controller-manager-custom.yaml"
-	ccmManifestFilename                         = "kubernetesmaster-cloud-controller-manager.yaml"
 	kubeAPIServerManifestFilename               = "kubernetesmaster-kube-apiserver.yaml"
 	kubeAddonManagerManifestFilename            = "kubernetesmaster-kube-addon-manager.yaml"
 )

@@ -94,6 +94,7 @@ phases:
           -e CLASSIC_BLOB=${CLASSIC_BLOB} \
           -e CLASSIC_SAS_TOKEN="$(SAS_TOKEN)" \
           -e OS_DISK_SAS=${OS_DISK_SAS} \
+          -e FILE_NAME=$(Date:yyyyMMdd)$(Rev:.r)_$(UBUNTU_SKU).vhd
           ${CONTAINER_IMAGE} make -f packer.mk az-copy
         displayName: Copying resource to Classic Storage Account
       - bash: |

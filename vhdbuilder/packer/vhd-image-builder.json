@@ -380,20 +380,6 @@
     {
       "type": "shell",
       "inline": [
-        "sudo FEATURE_FLAGS={{user `feature_flags`}} BUILD_NUMBER={{user `build_number`}} BUILD_ID={{user `build_id`}} COMMIT={{user `commit`}} HYPERV_GENERATION={{user `hyperv_generation`}} CONTAINER_RUNTIME={{user `container_runtime`}} TELEPORTD_PLUGIN_DOWNLOAD_URL={{user `teleportd_plugin_download_url`}} ENABLE_FIPS={{user `enable_fips`}} /bin/bash -ux /home/packer/install-dependencies.sh"
-      ]
-    },
-    {
-      "type": "file",
-      "direction": "download",
-      "source": "/opt/azure/vhd-install.complete",
-      "destination": "release-notes.txt"
-    },
-    {
-      "type": "shell",
-      "inline": [
-        "sudo /bin/bash -eux /home/packer/cis.sh",
-        "sudo /bin/bash -eux /home/packer/stig.sh",
         "sudo /bin/bash -eux /home/packer/cleanup-vhd.sh",
         "sudo /usr/sbin/waagent -force -deprovision+user && export HISTSIZE=0 && sync || exit 125"
       ]

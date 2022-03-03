@@ -86,7 +86,7 @@ $global:ContainerdWindowsRuntimeHandlers = "{{GetParameter "containerdWindowsRun
 #
 # Set default values for container runtime variables for AKS Windows 2004
 if ($([System.Environment]::OSVersion.Version).Build -eq "19041") {
-    $global:ContainerRuntime = "docker"
+    $global:ContainerRuntime = "containerd"
     $global:ContainerdWindowsRuntimeHandlers = "17763,19041"
     $global:DefaultContainerdWindowsSandboxIsolation = "process"
 }
@@ -414,40 +414,29 @@ try
         Get-HnsPsm1 -HNSModule $global:HNSModule
         Import-Module $global:HNSModule
 
-        if ($global:NetworkPlugin -eq "azure") {
-            Write-Log "Installing Azure VNet plugins"
-            Install-VnetPlugins -AzureCNIConfDir $global:AzureCNIConfDir `
-                -AzureCNIBinDir $global:AzureCNIBinDir `
-                -VNetCNIPluginsURL $global:VNetCNIPluginsURL
+        Write-Log "Installing Azure VNet plugins"
+        Install-VnetPlugins -AzureCNIConfDir $global:AzureCNIConfDir `
+            -AzureCNIBinDir $global:AzureCNIBinDir `
+            -VNetCNIPluginsURL $global:VNetCNIPluginsURL
 
-            Set-AzureCNIConfig -AzureCNIConfDir $global:AzureCNIConfDir `
-                -KubeDnsSearchPath $global:KubeDnsSearchPath `
-                -KubeClusterCIDR $global:KubeClusterCIDR `
-                -KubeServiceCIDR $global:KubeServiceCIDR `
-                -VNetCIDR $global:VNetCIDR `
-                -IsAzureStack {{if IsAKSCustomCloud}}$true{{else}}$false{{end}} `
-                -IsDualStackEnabled $global:IsDualStackEnabled
+        Set-AzureCNIConfig -AzureCNIConfDir $global:AzureCNIConfDir `
+            -KubeDnsSearchPath $global:KubeDnsSearchPath `
+            -KubeClusterCIDR $global:KubeClusterCIDR `
+            -KubeServiceCIDR $global:KubeServiceCIDR `
+            -VNetCIDR $global:VNetCIDR `
+            -IsAzureStack {{if IsAKSCustomCloud}}$true{{else}}$false{{end}} `
+            -IsDualStackEnabled $global:IsDualStackEnabled
 
-            if ($TargetEnvironment -ieq "AzureStackCloud") {
-                GenerateAzureStackCNIConfig `
-                    -TenantId $global:TenantId `
-                    -SubscriptionId $global:SubscriptionId `
-                    -ResourceGroup $global:ResourceGroup `
-                    -AADClientId $AADClientId `
-                    -KubeDir $global:KubeDir `
-                    -AADClientSecret $([System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($AADClientSecret))) `
-                    -NetworkAPIVersion $NetworkAPIVersion `
-                    -AzureEnvironmentFilePath $([io.path]::Combine($global:KubeDir, "azurestackcloud.json"))
-            }
-        }
-        elseif ($global:NetworkPlugin -eq "kubenet") {
-            Write-Log "Fetching additional files needed for kubenet"
-            if ($useContainerD) {
-                # TODO: CNI may need to move to c:\program files\containerd\cni\bin with ContainerD
-                Install-SdnBridge -Url $global:ContainerdSdnPluginUrl -CNIPath $global:CNIPath
-            } else {
-                Update-WinCNI -CNIPath $global:CNIPath
-            }
+        if ($TargetEnvironment -ieq "AzureStackCloud") {
+            GenerateAzureStackCNIConfig `
+                -TenantId $global:TenantId `
+                -SubscriptionId $global:SubscriptionId `
+                -ResourceGroup $global:ResourceGroup `
+                -AADClientId $AADClientId `
+                -KubeDir $global:KubeDir `
+                -AADClientSecret $([System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($AADClientSecret))) `
+                -NetworkAPIVersion $NetworkAPIVersion `
+                -AzureEnvironmentFilePath $([io.path]::Combine($global:KubeDir, "azurestackcloud.json"))
         }
 
         New-ExternalHnsNetwork -IsDualStackEnabled $global:IsDualStackEnabled
@@ -475,7 +464,24 @@ try
         Register-NodeLabelSyncScriptTask
         Update-DefenderPreferences
 
-        Check-APIServerConnectivity -MasterIP $MasterIP
+        if ($windowsSecureTlsEnabled) {
+            Write-Host "Enable secure TLS protocols"
+            try {
+                . C:\k\windowssecuretls.ps1
+                Enable-SecureTls
+            }
+            catch {
+                Set-ExitCode -ExitCode $global:WINDOWS_CSE_ERROR_ENABLE_SECURE_TLS -ErrorMessage $_
+            }
+        }
+
+        Enable-FIPSMode -FipsEnabled $fipsEnabled
+        if ($global:WindowsGmsaPackageUrl) {
+            Write-Log "Start to install Windows gmsa package"
+            Install-GmsaPlugin -GmsaPackageUrl $global:WindowsGmsaPackageUrl
+        }
+
+        Check-APIServerConnectivity -MasterIP $MasterIP -RetryInterval 10 -ConnectTimeout 3 -MaxRetryCount 360
 
         if ($global:WindowsCalicoPackageURL) {
             Write-Log "Start calico installation"

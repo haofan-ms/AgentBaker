@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/Azure/agentbaker/pkg/agent/datamodel"
-	"github.com/Azure/go-autorest/autorest/to"
 )
 
 // getCustomDataVariables returns cloudinit data used by Linux
@@ -18,22 +17,30 @@ func getCustomDataVariables(config *datamodel.NodeBootstrappingConfiguration) pa
 			"provisionStartScript":           getBase64EncodedGzippedCustomScript(kubernetesCSEStartScript, config),
 			"provisionScript":                getBase64EncodedGzippedCustomScript(kubernetesCSEMainScript, config),
 			"provisionSource":                getBase64EncodedGzippedCustomScript(kubernetesCSEHelpersScript, config),
+			"provisionSourceUbuntu":          getBase64EncodedGzippedCustomScript(kubernetesCSEHelpersScriptUbuntu, config),
+			"provisionSourceMariner":         getBase64EncodedGzippedCustomScript(kubernetesCSEHelpersScriptMariner, config),
 			"provisionInstalls":              getBase64EncodedGzippedCustomScript(kubernetesCSEInstall, config),
+			"provisionInstallsUbuntu":        getBase64EncodedGzippedCustomScript(kubernetesCSEInstallUbuntu, config),
+			"provisionInstallsMariner":       getBase64EncodedGzippedCustomScript(kubernetesCSEInstallMariner, config),
 			"provisionConfigs":               getBase64EncodedGzippedCustomScript(kubernetesCSEConfig, config),
 			"customSearchDomainsScript":      getBase64EncodedGzippedCustomScript(kubernetesCustomSearchDomainsScript, config),
 			"dhcpv6SystemdService":           getBase64EncodedGzippedCustomScript(dhcpv6SystemdService, config),
 			"dhcpv6ConfigurationScript":      getBase64EncodedGzippedCustomScript(dhcpv6ConfigurationScript, config),
 			"kubeletSystemdService":          getBase64EncodedGzippedCustomScript(kubeletSystemdService, config),
-			"systemdBPFMount":                getBase64EncodedGzippedCustomScript(systemdBPFMount, config),
 			"reconcilePrivateHostsScript":    getBase64EncodedGzippedCustomScript(reconcilePrivateHostsScript, config),
 			"reconcilePrivateHostsService":   getBase64EncodedGzippedCustomScript(reconcilePrivateHostsService, config),
 			"updateNodeLabelsSystemdService": getBase64EncodedGzippedCustomScript(updateNodeLabelsSystemdService, config),
 			"updateNodeLabelsScript":         getBase64EncodedGzippedCustomScript(updateNodeLabelsScript, config),
+			"ensureNoDupEbtablesScript":      getBase64EncodedGzippedCustomScript(ensureNoDupEbtablesScript, config),
+			"ensureNoDupEbtablesService":     getBase64EncodedGzippedCustomScript(ensureNoDupEbtablesService, config),
+			"bindMountScript":                getBase64EncodedGzippedCustomScript(bindMountScript, config),
+			"bindMountSystemdService":        getBase64EncodedGzippedCustomScript(bindMountSystemdService, config),
+			"migPartitionSystemdService":     getBase64EncodedGzippedCustomScript(migPartitionSystemdService, config),
+			"migPartitionScript":             getBase64EncodedGzippedCustomScript(migPartitionScript, config),
 			"kubeadmconfig":                  getBase64EncodedGzippedCustomScript(kubeadmConfig, config),
 			"ipMasqAgentConfigmap":           getBase64EncodedGzippedCustomScript(ipMasqAgentConfigmap, config),
-			"corednskustomization":           getBase64EncodedGzippedCustomScript(corednsKustomization, config),
-			"corednsclusterip":               getBase64EncodedGzippedCustomScript(corednsClusterIP, config),
-			"corednstolerations":             getBase64EncodedGzippedCustomScript(corednsTolerations, config),
+			"corednsAddonManifest":           getBase64EncodedGzippedCustomScript(corednsAddonManifest, config),
+			"kubeproxyAddonManifest":         getBase64EncodedGzippedCustomScript(kubeproxyAddonManifest, config),
 		},
 	}
 
@@ -53,8 +60,6 @@ func getCustomDataVariables(config *datamodel.NodeBootstrappingConfiguration) pa
 		cloudInitData["containerdMonitorSystemdService"] = getBase64EncodedGzippedCustomScript(kubernetesContainerdMonitorSystemdService, config)
 		cloudInitData["containerdMonitorSystemdTimer"] = getBase64EncodedGzippedCustomScript(kubernetesContainerdMonitorSystemdTimer, config)
 		cloudInitData["dockerClearMountPropagationFlags"] = getBase64EncodedGzippedCustomScript(dockerClearMountPropagationFlags, config)
-		cloudInitData["auditdRules"] = getBase64EncodedGzippedCustomScript(auditdRules, config)
-		cloudInitData["containerdSystemdService"] = getBase64EncodedGzippedCustomScript(containerdSystemdService, config)
 	}
 
 	return cloudInitFiles
@@ -88,6 +93,8 @@ func getWindowsCustomDataVariables(config *datamodel.NodeBootstrappingConfigurat
 		"windowsPauseImageURL":                 cs.Properties.WindowsProfile.WindowsPauseImageURL,
 		"alwaysPullWindowsPauseImage":          strconv.FormatBool(cs.Properties.WindowsProfile.IsAlwaysPullWindowsPauseImage()),
 		"windowsCalicoPackageURL":              cs.Properties.WindowsProfile.WindowsCalicoPackageURL,
+		"windowsSecureTlsEnabled":              cs.Properties.WindowsProfile.IsWindowsSecureTlsEnabled(),
+		"windowsGmsaPackageUrl":                cs.Properties.WindowsProfile.WindowsGmsaPackageUrl,
 	}
 
 	return customData
@@ -119,9 +126,10 @@ func getCSECommandVariables(config *datamodel.NodeBootstrappingConfiguration) pa
 		"isVHD":                           isVHD(profile),
 		"gpuNode":                         strconv.FormatBool(config.EnableNvidia),
 		"sgxNode":                         strconv.FormatBool(datamodel.IsSgxEnabledSKU(profile.VMSize)),
-		"auditdEnabled":                   strconv.FormatBool(to.Bool(profile.AuditDEnabled)),
 		"configGPUDriverIfNeeded":         config.ConfigGPUDriverIfNeeded,
 		"enableGPUDevicePluginIfNeeded":   config.EnableGPUDevicePluginIfNeeded,
+		"migNode":                         strconv.FormatBool(datamodel.IsMIGNode(config.GPUInstanceProfile)),
+		"gpuInstanceProfile":              config.GPUInstanceProfile,
 	}
 }
 
@@ -155,7 +163,6 @@ func getOutBoundCmd(cs *datamodel.ContainerService, cloudSpecConfig *datamodel.A
 		return ""
 	}
 	registry := ""
-	ncBinary := "nc"
 	if cloudSpecConfig.CloudName == datamodel.AzureChinaCloud {
 		registry = `gcr.azk8s.cn 443`
 	} else if cs.IsAKSCustomCloud() {
@@ -167,5 +174,5 @@ func getOutBoundCmd(cs *datamodel.ContainerService, cloudSpecConfig *datamodel.A
 	if registry == "" {
 		return ""
 	}
-	return `retrycmd_if_failure() { r=$1; w=$2; t=$3; shift && shift && shift; for i in $(seq 1 $r); do timeout $t ${@}; [ $? -eq 0  ] && break || if [ $i -eq $r ]; then return 1; else sleep $w; fi; done }; ERR_OUTBOUND_CONN_FAIL=50; retrycmd_if_failure 150 1 3 ` + ncBinary + ` -vz ` + registry + ` >> /var/log/azure/cluster-provision-cse-output.log 2>&1 || exit $ERR_OUTBOUND_CONN_FAIL;`
+	return `retrycmd_if_failure() { r=$1; w=$2; t=$3; shift && shift && shift; for i in $(seq 1 $r); do timeout $t ${@}; [ $? -eq 0  ] && break || if [ $i -eq $r ]; then return 1; else sleep $w; fi; done }; ERR_OUTBOUND_CONN_FAIL=50; retrycmd_if_failure 100 1 10 nc -vz ` + registry + ` >> /var/log/azure/cluster-provision-cse-output.log 2>&1 || time nc -vz ` + registry + ` || exit $ERR_OUTBOUND_CONN_FAIL;`
 }

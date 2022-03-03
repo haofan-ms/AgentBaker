@@ -14,63 +14,50 @@ configureAdminUser(){
     chage -l "${ADMINUSER}"
 }
 
-configureSecrets(){
-    APISERVER_PRIVATE_KEY_PATH="/etc/kubernetes/certs/apiserver.key"
-    touch "${APISERVER_PRIVATE_KEY_PATH}"
-    chmod 0600 "${APISERVER_PRIVATE_KEY_PATH}"
-    chown root:root "${APISERVER_PRIVATE_KEY_PATH}"
+RefreshEtcdManifest() {
+    # If initial-cluster does not contains all 3 ETCD cluster
+    # Wait for the ETCD started on all nodes and update the ETCD configration by re-join the node to the cluster
 
-    CA_PRIVATE_KEY_PATH="/etc/kubernetes/certs/ca.key"
-    touch "${CA_PRIVATE_KEY_PATH}"
-    chmod 0600 "${CA_PRIVATE_KEY_PATH}"
-    chown root:root "${CA_PRIVATE_KEY_PATH}"
+    extractEtcdctl || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MANIFEST
 
-    ETCD_SERVER_PRIVATE_KEY_PATH="/etc/kubernetes/certs/etcdserver.key"
-    touch "${ETCD_SERVER_PRIVATE_KEY_PATH}"
-    chmod 0600 "${ETCD_SERVER_PRIVATE_KEY_PATH}"
-    if [[ -z "${COSMOS_URI}" ]]; then
-      chown etcd:etcd "${ETCD_SERVER_PRIVATE_KEY_PATH}"
+    ETCD_INITIAL_CLUSTER_STRING=$(grep -E "initial-cluster=" /etc/kubernetes/manifests/etcd.yaml | grep -oE "aks-master.*")
+    echo "ETCD_INITIAL_CLUSTER_STRING $ETCD_INITIAL_CLUSTER_STRING"
+    IFS=',' read -a ETCD_INITIAL_CLUSTER_STRING_ARRAY <<< $ETCD_INITIAL_CLUSTER_STRING
+    echo "ETCD_INITIAL_CLUSTER_STRING_ARRAY Count ${#ETCD_INITIAL_CLUSTER_STRING_ARRAY[@]}"
+
+    if [ 3 !=  ${#ETCD_INITIAL_CLUSTER_STRING_ARRAY[@]} ]; then
+                ARE_ETCD_MEMBERS_READY=false
+                for i in {1..30}
+                do
+                        ETCDCTL_API=3
+                        ETCD_MEMBER_COUNT=$(retrycmd_if_failure_no_stats 10 15 300 etcdctl member list --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key | grep -c "started, aks-master")
+                        if [ $ETCD_MEMBER_COUNT == 3 ]
+                        then
+                                ARE_ETCD_MEMBERS_READY=true
+                                break
+                        fi
+                        sleep 30
+                done
+                retrycmd_if_failure_no_stats 10 15 300 etcdctl member list --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key
+                echo "ARE_ETCD_MEMBERS_READY $ARE_ETCD_MEMBERS_READY"
+                if [ "$ARE_ETCD_MEMBERS_READY" == "true" ] ; then
+                        echo "All ETCD members are ready"
+                        retrycmd_if_failure_no_stats 10 15 300 kubeadm join phase control-plane-join etcd --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MANIFEST
+                        echo "etcd manifest update is completed"
+                else
+                        echo "Some ETCD members are not ready"
+                        exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MANIFEST
+                fi
+    else
+        echo "ETCD_INITIAL_CLUSTER_STRING contains 3 members, skipping etcd manifest update"
     fi
-
-    ETCD_CLIENT_PRIVATE_KEY_PATH="/etc/kubernetes/certs/etcdclient.key"
-    touch "${ETCD_CLIENT_PRIVATE_KEY_PATH}"
-    chmod 0600 "${ETCD_CLIENT_PRIVATE_KEY_PATH}"
-    chown root:root "${ETCD_CLIENT_PRIVATE_KEY_PATH}"
-
-    ETCD_PEER_PRIVATE_KEY_PATH="/etc/kubernetes/certs/etcdpeer${NODE_INDEX}.key"
-    touch "${ETCD_PEER_PRIVATE_KEY_PATH}"
-    chmod 0600 "${ETCD_PEER_PRIVATE_KEY_PATH}"
-    if [[ -z "${COSMOS_URI}" ]]; then
-      chown etcd:etcd "${ETCD_PEER_PRIVATE_KEY_PATH}"
-    fi
-
-    ETCD_SERVER_CERTIFICATE_PATH="/etc/kubernetes/certs/etcdserver.crt"
-    touch "${ETCD_SERVER_CERTIFICATE_PATH}"
-    chmod 0644 "${ETCD_SERVER_CERTIFICATE_PATH}"
-    chown root:root "${ETCD_SERVER_CERTIFICATE_PATH}"
-
-    ETCD_CLIENT_CERTIFICATE_PATH="/etc/kubernetes/certs/etcdclient.crt"
-    touch "${ETCD_CLIENT_CERTIFICATE_PATH}"
-    chmod 0644 "${ETCD_CLIENT_CERTIFICATE_PATH}"
-    chown root:root "${ETCD_CLIENT_CERTIFICATE_PATH}"
-
-    ETCD_PEER_CERTIFICATE_PATH="/etc/kubernetes/certs/etcdpeer${NODE_INDEX}.crt"
-    touch "${ETCD_PEER_CERTIFICATE_PATH}"
-    chmod 0644 "${ETCD_PEER_CERTIFICATE_PATH}"
-    chown root:root "${ETCD_PEER_CERTIFICATE_PATH}"
-
-    set +x
-    echo "${APISERVER_PRIVATE_KEY}" | base64 --decode > "${APISERVER_PRIVATE_KEY_PATH}"
-    echo "${CA_PRIVATE_KEY}" | base64 --decode > "${CA_PRIVATE_KEY_PATH}"
-    echo "${ETCD_SERVER_PRIVATE_KEY}" | base64 --decode > "${ETCD_SERVER_PRIVATE_KEY_PATH}"
-    echo "${ETCD_CLIENT_PRIVATE_KEY}" | base64 --decode > "${ETCD_CLIENT_PRIVATE_KEY_PATH}"
-    echo "${ETCD_PEER_KEY}" | base64 --decode > "${ETCD_PEER_PRIVATE_KEY_PATH}"
-    echo "${ETCD_SERVER_CERTIFICATE}" | base64 --decode > "${ETCD_SERVER_CERTIFICATE_PATH}"
-    echo "${ETCD_CLIENT_CERTIFICATE}" | base64 --decode > "${ETCD_CLIENT_CERTIFICATE_PATH}"
-    echo "${ETCD_PEER_CERT}" | base64 --decode > "${ETCD_PEER_CERTIFICATE_PATH}"
 }
 
 customizeK8s() {
+    wait_for_file 1200 1 /etc/kubernetes/kubeadm-config.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+    wait_for_file 1200 1 /etc/kubernetes/addons/kube-proxy.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+    wait_for_file 1200 1 /etc/kubernetes/addons/coredns.yaml || exit $ERR_FILE_WATCH_TIMEOUT
+
     mkdir -p /etc/kubernetes/pki/etcd
     cp -p /etc/kubernetes/certs/ca.crt /etc/kubernetes/pki/ca.crt
     cp -p /etc/kubernetes/pki/sa.key /etc/kubernetes/pki/sa.pub
@@ -79,6 +66,14 @@ customizeK8s() {
     cp -p /etc/kubernetes/pki/ca.crt /etc/kubernetes/pki/etcd/ca.crt
     cp -p /etc/kubernetes/pki/ca.key /etc/kubernetes/pki/etcd/ca.key
 
+    kubeletserver_key="/etc/kubernetes/certs/kubeletserver.key"
+    kubeletserver_crt="/etc/kubernetes/certs/kubeletserver.crt"
+    openssl genrsa -out $kubeletserver_key 2048
+    openssl req -new -x509 -days 7300 -key $kubeletserver_key -out $kubeletserver_crt -subj "/CN=$(hostname)"
+
+    mkdir -p /etc/kubernetes/patches
+    KubeControllerManagerPatch
+
     FIRST_MASTER_NODE=true
     echo $NODE_NAME | grep -E '*-0$' > /dev/null
     if [[ "$?" != "0" ]]; then
@@ -86,51 +81,229 @@ customizeK8s() {
     fi
     if [[ -d /var/lib/etcddisk/etcd/member/ ]]; then
         FIRST_MASTER_NODE=false
-    fi
+    fi  
 
     if [ "${FIRST_MASTER_NODE}" = true ]; then
-        # times sleep timeout
-        retrycmd_if_failure 3 5 30 kubeadm init phase certs all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 3 5 30 kubeadm init phase kubeconfig all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 3 5 30 kubeadm init phase control-plane all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
-        retrycmd_if_failure 5 10 300 kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --skip-phases=control-plane,certs,kubeconfig --ignore-preflight-errors=all  -v 9
+        local ADDON_CONFIG=$(mktemp)
+        OLD="controlPlaneEndpoint: ${API_SERVER_NAME}"
+        NEW="controlPlaneEndpoint: ${INTERNAL_LB_IP}"
+        sed "s/${OLD}/${NEW}/1" ${CONFIG} > ${ADDON_CONFIG}
 
-        cat << EOF | retrycmd_if_failure 5 10 30 kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase certs all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase kubeconfig all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase control-plane all --config ${CONFIG} --experimental-patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 300 kubeadm init --config ${CONFIG} --skip-phases=certs,kubeconfig,control-plane,addon --ignore-preflight-errors=all -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
+
+        # TODO Remove line below once /etc/kubernetes/addons/psp.yaml is baked
+        PodSecurityPolicies
+        retrycmd_if_failure_no_stats 10 15 10 kubectl apply -f /etc/kubernetes/addons/psp.yaml --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
+
+        retrycmd_if_failure_no_stats 10 15 180 kubectl create clusterrolebinding nodegroup --clusterrole system:node --group system:nodes --kubeconfig ${KUBECONFIG}
+        retrycmd_if_failure_no_stats 10 15 180 kubectl create clusterrolebinding node-kubeproxy --clusterrole system:node-proxier --group system:nodes --kubeconfig ${KUBECONFIG}
+
+        retrycmd_if_failure_no_stats 10 15 10 kubectl apply -f /etc/kubernetes/addons/kube-proxy.yaml --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
+        retrycmd_if_failure_no_stats 10 15 10 kubectl apply -f /etc/kubernetes/addons/coredns.yaml --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
+    
+        for ADDON in {{GetAddonsURI}}; do
+            retrycmd_if_failure_no_stats 10 15 180 kubectl apply -f ${ADDON} --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
+        done
+    else
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare certs --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare kubeconfig --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+
+        retrycmd_if_failure_no_stats 10 15 180 kubectl get cm kubeadm-config -n kube-system -o yaml --kubeconfig ${KUBECONFIG} > /tmp/kubeadm-config.yaml || exit $ERR_ASH_KUBEADM_GEN_FILES
+        sed "s/v1.[0-9]*.[0-9]*-azs$/v{{KubernetesVersion}}-azs/1" /tmp/kubeadm-config.yaml > /tmp/kubeadm-upgrade.yaml
+        cmp -s /tmp/kubeadm-config.yaml /tmp/kubeadm-upgrade.yaml
+        UPGRADE=$?
+
+        if [ $UPGRADE == 1 ] ; then
+            CUR_MINOR=$(grep -oh "v1.[0-9]*.[0-9]*-azs$" /tmp/kubeadm-config.yaml | grep -oh "\.[0-9][0-9]\." | grep -o [0-9][0-9])
+            NEW_MINOR=$(echo {{KubernetesVersion}} | grep -oh "\.[0-9][0-9]\." | grep -o [0-9][0-9])
+
+            echo "upgrading control plane node to kubernetes v{{KubernetesVersion}}"
+            kubectl create role kubeadm:kubelet-config-1.${NEW_MINOR} -n kube-system --verb=get --resource=configmaps --resource-name=kubelet-config-1.${NEW_MINOR} --dry-run=client -o yaml \
+            | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
+            
+            kubectl create rolebinding kubeadm:kubelet-config-1.${NEW_MINOR} -n kube-system --role=kubeadm:kubelet-config-1.${NEW_MINOR} --group=system:nodes --group=system:bootstrappers:kubeadm:default-node-token --dry-run=client -o yaml \
+            | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
+
+            kubectl create clusterrole kubeadm:get-nodes --verb=get --resource=nodes --dry-run=client -o yaml \
+            | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
+
+            kubectl create clusterrolebinding kubeadm:get-nodes --clusterrole=kubeadm:get-nodes --group=system:bootstrappers:kubeadm:default-node-token --dry-run=client -o yaml \
+            | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
+
+            retrycmd_if_failure_no_stats 10 15 30 kubectl get cm kubelet-config-1.${CUR_MINOR} -n kube-system -o yaml --kubeconfig ${KUBECONFIG} > kubelet-config.yaml || exit $ERR_ASH_KUBEADM_INIT_JOIN
+
+            sed "/resourceVersion/d" kubelet-config.yaml | sed "s/kubelet-config-1.${CUR_MINOR}/kubelet-config-1.${NEW_MINOR}/1" \
+            | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
+
+            retrycmd_if_failure_no_stats 10 15 30 kubectl replace -n kube-system cm kubeadm-conf -f /tmp/kubeadm-upgrade.yaml --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_KUBEADM_INIT_JOIN
+
+            retrycmd_if_failure_no_stats 10 15 30 kubectl apply -f /etc/kubernetes/addons/coredns.yaml --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
+        fi
+
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare control-plane --config ${CONFIG} --experimental-patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase kubelet-start --config ${CONFIG} -v 9 || exit $ERR_KUBELET_START_FAIL
+        retrycmd_if_failure_no_stats 10 15 300 kubeadm join phase control-plane-join all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
+        retrycmd_if_failure_no_stats 10 15 180 kubectl uncordon ${NODE_NAME} --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_KUBEADM_INIT_JOIN
+    fi
+
+    RefreshEtcdManifest || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MANIFEST
+}
+
+KubeControllerManagerPatch() {
+    cat << EOF > /etc/kubernetes/patches/kube-controller-manager+strategic.yaml
+spec:
+  containers:
+  - name: kube-controller-manager
+    env:
+    - name: AZURE_ENVIRONMENT_FILEPATH
+      value: /etc/kubernetes/azurestackcloud.json
+EOF
+}
+
+# TODO Remove function once /etc/kubernetes/addons/psp.yaml is baked
+PodSecurityPolicies() {
+    if [ ! -f /etc/kubernetes/addons/psp.yaml ]; then
+    cat << EOF > /etc/kubernetes/addons/psp.yaml
+# source: https://raw.githubusercontent.com/kubernetes/website/main/content/en/examples/policy/privileged-psp.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: privileged
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: '*'
+spec:
+  privileged: true
+  allowPrivilegeEscalation: true
+  allowedCapabilities:
+  - '*'
+  volumes:
+  - '*'
+  hostNetwork: true
+  hostPorts:
+  - min: 0
+    max: 65535
+  hostIPC: true
+  hostPID: true
+  runAsUser:
+    rule: 'RunAsAny'
+  seLinux:
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'
+---
+# source: https://raw.githubusercontent.com/kubernetes/website/main/content/en/examples/policy/restricted-psp.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: restricted
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default,runtime/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName:  'runtime/default'
+spec:
+  privileged: false
+  # Required to prevent escalations to root.
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  # Allow core volume types.
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    # Assume that ephemeral CSI drivers & persistentVolumes set up by the cluster admin are safe to use.
+    - 'csi'
+    - 'persistentVolumeClaim'
+    - 'ephemeral'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    # Require the container to run without root privileges.
+    rule: 'MustRunAsNonRoot'
+  seLinux:
+    # This policy assumes the nodes are using AppArmor rather than SELinux.
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+      # Forbid adding the root group.
+      - min: 1
+        max: 65535
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      # Forbid adding the root group.
+      - min: 1
+        max: 65535
+  readOnlyRootFilesystem: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: psp:privileged
+rules:
+- apiGroups: ['extensions']
+  resources: ['podsecuritypolicies']
+  verbs:     ['use']
+  resourceNames:
+  - privileged
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: psp:restricted
+rules:
+- apiGroups: ['extensions']
+  resources: ['podsecuritypolicies']
+  verbs:     ['use']
+  resourceNames:
+  - restricted
+---
+# authenticated users use psp:privileged cluster wide
+# cluster admin should replace this cluster role binding to tight access
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: nodegroup
-subjects:
-- apiGroup: rbac.authorization.k8s.io
-  kind: Group
-  name: system:nodes
+  name: authenticated:privileged
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: system:node
+  name: psp:privileged
+subjects:
+- kind: Group
+  name: system:authenticated
+  apiGroup: rbac.authorization.k8s.io
+---
+# cluster-admins and kube-system service accounts use psp:privileged
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: control-plane:privileged
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: psp:privileged
+subjects:
+- kind: Group
+  name: system:masters
+  apiGroup: rbac.authorization.k8s.io
+- kind: Group
+  name: system:serviceaccounts:kube-system
+  apiGroup: rbac.authorization.k8s.io
+- kind: Group
+  name: system:nodes
+  apiGroup: rbac.authorization.k8s.io
 EOF
-
-        retrycmd_if_failure_no_stats 5 10 30 kubectl get deploy coredns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/deployment.yaml
-        retrycmd_if_failure_no_stats 5 10 30 kubectl get service kube-dns -n kube-system --kubeconfig /etc/kubernetes/admin.conf -o yaml > /etc/kubernetes/kustomize/coredns/service.yaml
-        retrycmd_if_failure_no_stats 5 10 30 kubectl delete service kube-dns -n kube-system --kubeconfig /etc/kubernetes/admin.conf
-        retrycmd_if_failure_no_stats 5 10 30 kubectl kustomize /etc/kubernetes/kustomize/coredns | kubectl apply --kubeconfig /etc/kubernetes/admin.conf -f -
-
-        for ADDON in {{GetAddonsURI}}; do
-            retrycmd_if_failure 5 10 30 kubectl apply -f ${ADDON} --kubeconfig /etc/kubernetes/admin.conf
-        done
-    else
-        retrycmd_if_failure 3 5 30 kubeadm join phase control-plane-prepare all --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: IfNotPresent\n    env:\n    - name: AZURE_ENVIRONMENT_FILEPATH\n      value: \/etc\/kubernetes\/azurestackcloud.json|' /etc/kubernetes/manifests/kube-controller-manager.yaml
-        retrycmd_if_failure 3 5 30 kubeadm join phase kubelet-start --config /etc/kubernetes/kubeadm-config.yaml -v 9
-        retrycmd_if_failure 5 10 300 kubeadm join phase control-plane-join all --config /etc/kubernetes/kubeadm-config.yaml -v 9
     fi
-
-    # TODO ASH Delete
-    mkdir -p /home/${ADMINUSER}/.kube
-    cp /etc/kubernetes/admin.conf /home/${ADMINUSER}/.kube/config
-    chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube
-    chown ${ADMINUSER}:${ADMINUSER} /home/${ADMINUSER}/.kube/config
 }
 
 {{- if EnableHostsConfigAgent}}
@@ -349,6 +522,17 @@ customizeCNI() {
     {{end}}
 }
 
+customizeCNI() {
+    {{- if IsAzureStackCloud}}
+    if [[ "${NETWORK_PLUGIN}" = "azure" ]]; then
+        generateIPAMFileSource
+        local temp=$(mktemp)
+        cp $CNI_CONFIG_DIR/10-azure.conflist ${temp}
+        jq '.plugins[0].ipam.environment = "mas"' ${temp} > $CNI_CONFIG_DIR/10-azure.conflist
+    fi
+    {{end}}
+}
+
 configureCNIIPTables() {
     if [[ "${NETWORK_PLUGIN}" = "azure" ]]; then
         mv $CNI_BIN_DIR/10-azure.conflist $CNI_CONFIG_DIR/
@@ -387,7 +571,7 @@ generateIPAMFileSource() {
 
     if [[ -z ${TOKEN} ]]; then
         echo "Error generating token for Azure Resource Manager"
-        exit 120
+        exit ${ERR_ASH_GET_ARM_TOKEN}
     fi
 
     curl -s --retry 5 --retry-delay 10 --max-time 60 -f -X GET \
@@ -398,7 +582,7 @@ generateIPAMFileSource() {
 
     if [[ ! -s ${NETWORK_INTERFACES_FILE} ]]; then
         echo "Error fetching network interface configuration for node"
-        exit 121
+        exit ${ERR_ASH_GET_NETWORK_CONFIGURATION}
     fi
 
     echo "Generating Azure CNI interface file"
@@ -409,7 +593,7 @@ generateIPAMFileSource() {
 
     if [[ -z ${SDN_INTERFACES} ]]; then
         echo "Error extracting the SDN interfaces from the network interfaces file"
-        exit 123
+        exit ${ERR_ASH_GET_SUBNET_PREFIX}
     fi
 
     AZURE_CNI_CONFIG=$(echo ${SDN_INTERFACES} | jq "{Interfaces: [.[] | {MacAddress: .properties.macAddress, IsPrimary: .properties.primary, IPSubnets: [{Prefix: .properties.ipConfigurations[0].properties.subnet.id, IPAddresses: .properties.ipConfigurations | [.[] | {Address: .properties.privateIPAddress, IsPrimary: .properties.primary}]}]}]}")
@@ -425,7 +609,7 @@ generateIPAMFileSource() {
 
         if [[ -z ${SUBNET_PREFIX} ]]; then
             echo "Error fetching the subnet address prefix for a subnet ID"
-            exit 122
+            exit ${ERR_ASH_GET_SUBNET_PREFIX}
         fi
 
         AZURE_CNI_CONFIG=$(echo ${AZURE_CNI_CONFIG} | sed "s|${SUBNET_ID}|${SUBNET_PREFIX}|g")

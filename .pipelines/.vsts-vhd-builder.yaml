@@ -68,7 +68,7 @@ phases:
           -e UBUNTU_SKU=${UBUNTU_SKU} \
           -e HYPERV_GENERATION=${HYPERV_GENERATION} \
           -e OS_TYPE="Linux" \
-          -e CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-"docker"} \
+          -e CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-"containerd"} \
           -e MODE=$(MODE) \
           -e SIG_GALLERY_NAME=${SIG_GALLERY_NAME} \
           -e SIG_IMAGE_NAME=${SIG_IMAGE_NAME} \
@@ -175,4 +175,4 @@ phases:
         inputs:
           artifactName: 'publishing-info'
           targetPath: 'vhd-publishing-info.json'
-        condition: and(eq(variables.DRY_RUN, 'False'), ne(variables['MODE'], 'sigMode'))
+        condition: and(succeeded(), eq(variables.DRY_RUN, 'False'), ne(variables['MODE'], 'sigMode'))

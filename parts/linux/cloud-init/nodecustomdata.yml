@@ -88,7 +88,22 @@ write_files:
   content: !!binary |
     {{GetVariableProperty "cloudInitData" "kubeletSystemdService"}}
 
-{{- if not .IsVHDDistro}}
+{{- if IsMIGEnabledNode}}
+- path: /etc/systemd/system/mig-partition.service
+  permissions: "0644"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "migPartitionSystemdService"}}
+
+- path: /opt/azure/containers/mig-partition.sh
+  permissions: "0544"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "migPartitionScript"}}  
+{{end}}
+
 - path: /etc/systemd/system/update-node-labels.service
   permissions: "0644"
   encoding: gzip
@@ -101,7 +116,22 @@ write_files:
   encoding: gzip
   owner: root
   content: !!binary |
-    {{GetVariableProperty "cloudInitData" "updateNodeLabelsScript"}}
+    {{GetVariableProperty "cloudInitData" "updateNodeLabelsScript"}}  
+
+{{- if HasKubeletDiskType}}
+- path: /opt/azure/containers/bind-mount.sh
+  permissions: "0544"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "bindMountScript"}}
+
+- path: /etc/systemd/system/bind-mount.service
+  permissions: "0644"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "bindMountSystemdService"}}
 {{end}}
 
 {{if not .IsVHDDistro}}
@@ -191,7 +221,7 @@ write_files:
     {{GetVariableProperty "cloudInitData" "dhcpv6ConfigurationScript"}}
 {{end}}
 
-{{if RequiresDocker}}
+{{if NeedsDocker}}
     {{if not .IsVHDDistro}}
 - path: /etc/systemd/system/docker.service.d/clear_mount_propagation_flags.conf
   permissions: "0644"
@@ -488,7 +518,7 @@ write_files:
     - name: localcluster
       cluster:
         certificate-authority: /etc/kubernetes/certs/ca.crt
-        server: https://{{GetKubernetesEndpoint}}:443
+        server: https://{{InternalLoadBalancerIP}}:443
     users:
     - name: client
       user:
@@ -527,6 +557,10 @@ write_files:
   owner: root
   content: |
     #!/bin/bash
+{{if IsControlPlane}}
+    {{- /* Redirect ILB (4443) traffic to port 443 (ELB) in the prerouting chain */}}
+    iptables -t nat -A PREROUTING -p tcp --dport 4443 -j REDIRECT --to-port 443
+{{end}}
 {{if not IsIPMasqAgentEnabled}}
     {{if IsAzureCNI}}
     iptables -t nat -A POSTROUTING -m iprange ! --dst-range 168.63.129.16 -m addrtype ! --dst-type local ! -d {{GetParameter "vnetCidr"}} -j MASQUERADE
@@ -683,26 +717,19 @@ write_files:
   content: !!binary |
     {{GetVariableProperty "cloudInitData" "ipMasqAgentConfigmap"}}
 
-- path: /etc/kubernetes/kustomize/coredns/kustomization.yaml
+- path: /etc/kubernetes/addons/coredns.yaml
   permissions: "0600"
   encoding: gzip
   owner: root
   content: !!binary |
-    {{GetVariableProperty "cloudInitData" "corednskustomization"}}
+    {{GetVariableProperty "cloudInitData" "corednsAddonManifest"}}
 
-- path: /etc/kubernetes/kustomize/coredns/cluster-ip.yaml
+- path: /etc/kubernetes/addons/kube-proxy.yaml
   permissions: "0600"
   encoding: gzip
   owner: root
   content: !!binary |
-    {{GetVariableProperty "cloudInitData" "corednsclusterip"}}
-
-- path: /etc/kubernetes/kustomize/coredns/tolerations.yaml
-  permissions: "0600"
-  encoding: gzip
-  owner: root
-  content: !!binary |
-    {{GetVariableProperty "cloudInitData" "corednstolerations"}}
+    {{GetVariableProperty "cloudInitData" "kubeproxyAddonManifest"}}
 
 disk_setup:
   /dev/disk/azure/scsi1/lun0:

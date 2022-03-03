@@ -11,24 +11,17 @@ import (
 	"math/rand"
 	neturl "net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/Azure/agentbaker/pkg/aks-engine/helpers"
 	"github.com/Azure/go-autorest/autorest/to"
-	"github.com/blang/semver"
 )
 
 // TypeMeta describes an individual API model object
 type TypeMeta struct {
 	// APIVersion is on every object
 	APIVersion string `json:"apiVersion"`
-}
-
-// CustomNodesDNS represents the Search Domain when the custom vnet for a custom DNS as a nameserver.
-type CustomNodesDNS struct {
-	DNSServer string `json:"dnsServer,omitempty"`
 }
 
 // CustomSearchDomain represents the Search Domain when the custom vnet has a windows server DNS as a nameserver.
@@ -116,23 +109,56 @@ const (
 	TempDisk KubeletDiskType = "Temporary"
 )
 
+// WorkloadRuntime describes choices for the type of workload: container or wasm-wasi, currently.
+type WorkloadRuntime string
+
+const (
+	// OCIContainer indicates that kubelet will be used for a container workload.
+	OCIContainer WorkloadRuntime = "OCIContainer"
+	// WasmWasi indicates Krustlet will be used for a WebAssembly workload.
+	WasmWasi WorkloadRuntime = "WasmWasi"
+)
+
 // Distro represents Linux distro to use for Linux VMs
 type Distro string
 
 // Distro string consts
 const (
-	Ubuntu                         Distro = "ubuntu"
-	Ubuntu1804                     Distro = "ubuntu-18.04"
-	Ubuntu1804Gen2                 Distro = "ubuntu-18.04-gen2"
-	AKSUbuntu1804Gen2              Distro = "ubuntu-18.04-gen2" // same distro as Ubuntu1804Gen2, renamed for clarity
-	AKSUbuntu1604                  Distro = "aks-ubuntu-16.04"
-	AKSUbuntu1804                  Distro = "aks-ubuntu-18.04"
-	AKSUbuntuGPU1804               Distro = "aks-ubuntu-gpu-18.04"
-	AKSUbuntuGPU1804Gen2           Distro = "aks-ubuntu-gpu-18.04-gen2"
-	AKSUbuntuContainerd1804        Distro = "aks-ubuntu-containerd-18.04"
-	AKSUbuntuContainerd1804Gen2    Distro = "aks-ubuntu-containerd-18.04-gen2"
-	AKSUbuntuGPUContainerd1804     Distro = "aks-ubuntu-gpu-containerd-18.04"
-	AKSUbuntuGPUContainerd1804Gen2 Distro = "aks-ubuntu-gpu-containerd-18.04-gen2"
+	Ubuntu                             Distro = "ubuntu"
+	Ubuntu1804                         Distro = "ubuntu-18.04"
+	Ubuntu1804Gen2                     Distro = "ubuntu-18.04-gen2"
+	AKSUbuntu1804Gen2                  Distro = "ubuntu-18.04-gen2" // same distro as Ubuntu1804Gen2, renamed for clarity
+	AKSUbuntu1604                      Distro = "aks-ubuntu-16.04"
+	AKSUbuntu1804                      Distro = "aks-ubuntu-18.04"
+	AKSUbuntuGPU1804                   Distro = "aks-ubuntu-gpu-18.04"
+	AKSUbuntuGPU1804Gen2               Distro = "aks-ubuntu-gpu-18.04-gen2"
+	AKSUbuntuContainerd1804            Distro = "aks-ubuntu-containerd-18.04"
+	AKSUbuntuContainerd1804Gen2        Distro = "aks-ubuntu-containerd-18.04-gen2"
+	AKSUbuntuGPUContainerd1804         Distro = "aks-ubuntu-gpu-containerd-18.04"
+	AKSUbuntuGPUContainerd1804Gen2     Distro = "aks-ubuntu-gpu-containerd-18.04-gen2"
+	AKSCBLMarinerV1                    Distro = "aks-cblmariner-v1"
+	AKSUbuntuFipsContainerd1804        Distro = "aks-ubuntu-fips-containerd-18.04"
+	AKSUbuntuFipsContainerd1804Gen2    Distro = "aks-ubuntu-fips-containerd-18.04-gen2"
+	AKSUbuntuFipsGPUContainerd1804     Distro = "aks-ubuntu-fips-gpu-containerd-18.04"
+	AKSUbuntuFipsGPUContainerd1804Gen2 Distro = "aks-ubuntu-fips-gpu-containerd-18.04-gen2"
+	RHEL                               Distro = "rhel"
+	CoreOS                             Distro = "coreos"
+	AKS1604Deprecated                  Distro = "aks"      // deprecated AKS 16.04 distro. Equivalent to aks-ubuntu-16.04.
+	AKS1804Deprecated                  Distro = "aks-1804" // deprecated AKS 18.04 distro. Equivalent to aks-ubuntu-18.04.
+
+	// Windows string const
+	// AKSWindows2019 stands for distro of windows server 2019 SIG image with docker
+	AKSWindows2019 Distro = "aks-windows-2019"
+	// AKSWindows2019Containerd stands for distro for windows server 2019 SIG image with containerd
+	AKSWindows2019Containerd Distro = "aks-windows-2019-containerd"
+	// AKSWindows2019PIR stands for distro of windows server 2019 PIR image with docker
+	AKSWindows2019PIR        Distro = "aks-windows-2019-pir"
+	CustomizedWindowsOSImage Distro = "CustomizedWindowsOSImage"
+
+	// USNatCloud is a const string reference identifier for USNat
+	USNatCloud = "USNatCloud"
+	// USSecCloud is a const string reference identifier for USSec
+	USSecCloud = "USSecCloud"
 )
 
 var AKSDistrosAvailableOnVHD []Distro = []Distro{
@@ -145,6 +171,11 @@ var AKSDistrosAvailableOnVHD []Distro = []Distro{
 	AKSUbuntuContainerd1804Gen2,
 	AKSUbuntuGPUContainerd1804,
 	AKSUbuntuGPUContainerd1804Gen2,
+	AKSCBLMarinerV1,
+	AKSUbuntuFipsContainerd1804,
+	AKSUbuntuFipsContainerd1804Gen2,
+	AKSUbuntuFipsGPUContainerd1804,
+	AKSUbuntuFipsGPUContainerd1804Gen2,
 }
 
 func (d Distro) IsVHDDistro() bool {
@@ -305,18 +336,6 @@ type CertificateProfile struct {
 	KubeConfigCertificate string `json:"kubeConfigCertificate,omitempty" conform:"redact"`
 	// KubeConfigPrivateKey is the client private key used for kubectl cli and signed by the CA
 	KubeConfigPrivateKey string `json:"kubeConfigPrivateKey,omitempty" conform:"redact"`
-	// EtcdServerCertificate is the server certificate for etcd, and signed by the CA
-	EtcdServerCertificate string `json:"etcdServerCertificate,omitempty" conform:"redact"`
-	// EtcdServerPrivateKey is the server private key for etcd, and signed by the CA
-	EtcdServerPrivateKey string `json:"etcdServerPrivateKey,omitempty" conform:"redact"`
-	// EtcdClientCertificate is etcd client certificate, and signed by the CA
-	EtcdClientCertificate string `json:"etcdClientCertificate,omitempty" conform:"redact"`
-	// EtcdClientPrivateKey is the etcd client private key, and signed by the CA
-	EtcdClientPrivateKey string `json:"etcdClientPrivateKey,omitempty" conform:"redact"`
-	// EtcdPeerCertificates is list of etcd peer certificates, and signed by the CA
-	EtcdPeerCertificates []string `json:"etcdPeerCertificates,omitempty" conform:"redact"`
-	// EtcdPeerPrivateKeys is list of etcd peer private keys, and signed by the CA
-	EtcdPeerPrivateKeys []string `json:"etcdPeerPrivateKeys,omitempty" conform:"redact"`
 }
 
 // ServicePrincipalProfile contains the client and secret used by the cluster for Azure Resource CRUD
@@ -377,6 +396,8 @@ type WindowsProfile struct {
 	AlwaysPullWindowsPauseImage   *bool                      `json:"alwaysPullWindowsPauseImage,omitempty"`
 	ContainerdWindowsRuntimes     *ContainerdWindowsRuntimes `json:"containerdWindowsRuntimes,omitempty"`
 	WindowsCalicoPackageURL       string                     `json:"windowsCalicoPackageURL,omitempty"`
+	WindowsSecureTlsEnabled       *bool                      `json:"windowsSecureTlsEnabled,omitempty"`
+	WindowsGmsaPackageUrl         string                     `json:"windowsGmsaPackageUrl,omitempty"`
 }
 
 // ContainerdWindowsRuntimes configures containerd runtimes that are available on the windows nodes
@@ -396,12 +417,9 @@ type LinuxProfile struct {
 	SSH           struct {
 		PublicKeys []PublicKey `json:"publicKeys"`
 	} `json:"ssh"`
-	Secrets               []KeyVaultSecrets   `json:"secrets,omitempty"`
-	Distro                Distro              `json:"distro,omitempty"`
-	ScriptRootURL         string              `json:"scriptroot,omitempty"`
-	CustomSearchDomain    *CustomSearchDomain `json:"customSearchDomain,omitempty"`
-	CustomNodesDNS        *CustomNodesDNS     `json:"CustomNodesDNS,omitempty"`
-	IsSSHKeyAutoGenerated *bool               `json:"isSSHKeyAutoGenerated,omitempty"`
+	Secrets            []KeyVaultSecrets   `json:"secrets,omitempty"`
+	Distro             Distro              `json:"distro,omitempty"`
+	CustomSearchDomain *CustomSearchDomain `json:"customSearchDomain,omitempty"`
 }
 
 // Extension represents an extension definition in the master or agentPoolProfile
@@ -455,19 +473,6 @@ type KubernetesAddon struct {
 	Data       string                    `json:"data,omitempty"`
 }
 
-// KubeProxyMode is for iptables and ipvs (and future others)
-type KubeProxyMode string
-
-// We currently support ipvs and iptables
-const (
-	// KubeProxyModeIPTables is used to set the kube-proxy to iptables mode
-	KubeProxyModeIPTables KubeProxyMode = "iptables"
-	// KubeProxyModeIPVS is used to set the kube-proxy to ipvs mode
-	KubeProxyModeIPVS KubeProxyMode = "ipvs"
-	// DefaultKubeProxyMode is the default KubeProxyMode value
-	DefaultKubeProxyMode KubeProxyMode = KubeProxyModeIPTables
-)
-
 // KubernetesConfig contains the Kubernetes config structure, containing
 // Kubernetes specific configuration
 type KubernetesConfig struct {
@@ -486,41 +491,24 @@ type KubernetesConfig struct {
 	UserAssignedID                    string            `json:"userAssignedID,omitempty"`
 	UserAssignedClientID              string            `json:"userAssignedClientID,omitempty"` //Note: cannot be provided in config. Used *only* for transferring this to azure.json.
 	CustomHyperkubeImage              string            `json:"customHyperkubeImage,omitempty"`
-	CustomKubeAPIServerImage          string            `json:"customKubeAPIServerImage,omitempty"`
-	CustomKubeControllerManagerImage  string            `json:"customKubeControllerManagerImage,omitempty"`
 	CustomKubeProxyImage              string            `json:"customKubeProxyImage,omitempty"`
-	CustomKubeSchedulerImage          string            `json:"customKubeSchedulerImage,omitempty"`
 	CustomKubeBinaryURL               string            `json:"customKubeBinaryURL,omitempty"`
-	DockerEngineVersion               string            `json:"dockerEngineVersion,omitempty"` // Deprecated
 	MobyVersion                       string            `json:"mobyVersion,omitempty"`
 	ContainerdVersion                 string            `json:"containerdVersion,omitempty"`
-	CustomCcmImage                    string            `json:"customCcmImage,omitempty"` // Image for cloud-controller-manager
-	UseCloudControllerManager         *bool             `json:"useCloudControllerManager,omitempty"`
-	CustomWindowsPackageURL           string            `json:"customWindowsPackageURL,omitempty"`
 	WindowsNodeBinariesURL            string            `json:"windowsNodeBinariesURL,omitempty"`
 	WindowsContainerdURL              string            `json:"windowsContainerdURL,omitempty"`
 	WindowsSdnPluginURL               string            `json:"windowsSdnPluginURL,omitempty"`
 	UseInstanceMetadata               *bool             `json:"useInstanceMetadata,omitempty"`
 	EnableRbac                        *bool             `json:"enableRbac,omitempty"`
 	EnableSecureKubelet               *bool             `json:"enableSecureKubelet,omitempty"`
-	EnableAggregatedAPIs              bool              `json:"enableAggregatedAPIs,omitempty"`
 	PrivateCluster                    *PrivateCluster   `json:"privateCluster,omitempty"`
 	GCHighThreshold                   int               `json:"gchighthreshold,omitempty"`
 	GCLowThreshold                    int               `json:"gclowthreshold,omitempty"`
-	EtcdVersion                       string            `json:"etcdVersion,omitempty"`
-	EtcdDiskSizeGB                    string            `json:"etcdDiskSizeGB,omitempty"`
-	EtcdEncryptionKey                 string            `json:"etcdEncryptionKey,omitempty"`
-	EnableDataEncryptionAtRest        *bool             `json:"enableDataEncryptionAtRest,omitempty"`
 	EnableEncryptionWithExternalKms   *bool             `json:"enableEncryptionWithExternalKms,omitempty"`
-	EnablePodSecurityPolicy           *bool             `json:"enablePodSecurityPolicy,omitempty"`
 	Addons                            []KubernetesAddon `json:"addons,omitempty"`
-	KubeletConfig                     map[string]string `json:"kubeletConfig,omitempty"`
 	ContainerRuntimeConfig            map[string]string `json:"containerRuntimeConfig,omitempty"`
 	ControllerManagerConfig           map[string]string `json:"controllerManagerConfig,omitempty"`
-	CloudControllerManagerConfig      map[string]string `json:"cloudControllerManagerConfig,omitempty"`
-	APIServerConfig                   map[string]string `json:"apiServerConfig,omitempty"`
 	SchedulerConfig                   map[string]string `json:"schedulerConfig,omitempty"`
-	PodSecurityPolicyConfig           map[string]string `json:"podSecurityPolicyConfig,omitempty"` // Deprecated
 	CloudProviderBackoffMode          string            `json:"cloudProviderBackoffMode"`
 	CloudProviderBackoff              *bool             `json:"cloudProviderBackoff,omitempty"`
 	CloudProviderBackoffRetries       int               `json:"cloudProviderBackoffRetries,omitempty"`
@@ -533,22 +521,13 @@ type KubernetesConfig struct {
 	CloudProviderRateLimitBucket      int               `json:"cloudProviderRateLimitBucket,omitempty"`
 	CloudProviderRateLimitBucketWrite int               `json:"cloudProviderRateLimitBucketWrite,omitempty"`
 	CloudProviderDisableOutboundSNAT  *bool             `json:"cloudProviderDisableOutboundSNAT,omitempty"`
-	NonMasqueradeCidr                 string            `json:"nonMasqueradeCidr,omitempty"`
 	NodeStatusUpdateFrequency         string            `json:"nodeStatusUpdateFrequency,omitempty"`
-	HardEvictionThreshold             string            `json:"hardEvictionThreshold,omitempty"`
-	CtrlMgrNodeMonitorGracePeriod     string            `json:"ctrlMgrNodeMonitorGracePeriod,omitempty"`
-	CtrlMgrPodEvictionTimeout         string            `json:"ctrlMgrPodEvictionTimeout,omitempty"`
-	CtrlMgrRouteReconciliationPeriod  string            `json:"ctrlMgrRouteReconciliationPeriod,omitempty"`
 	LoadBalancerSku                   string            `json:"loadBalancerSku,omitempty"`
 	ExcludeMasterFromStandardLB       *bool             `json:"excludeMasterFromStandardLB,omitempty"`
-	AzureCNIVersion                   string            `json:"azureCNIVersion,omitempty"`
 	AzureCNIURLLinux                  string            `json:"azureCNIURLLinux,omitempty"`
 	AzureCNIURLWindows                string            `json:"azureCNIURLWindows,omitempty"`
-	KeyVaultSku                       string            `json:"keyVaultSku,omitempty"`
 	MaximumLoadBalancerRuleCount      int               `json:"maximumLoadBalancerRuleCount,omitempty"`
-	ProxyMode                         KubeProxyMode     `json:"kubeProxyMode,omitempty"`
 	PrivateAzureRegistryServer        string            `json:"privateAzureRegistryServer,omitempty"`
-	OutboundRuleIdleTimeoutInMinutes  int32             `json:"outboundRuleIdleTimeoutInMinutes,omitempty"`
 }
 
 // CustomFile has source as the full absolute source path to a file and dest
@@ -567,9 +546,6 @@ type OrchestratorProfile struct {
 
 // ProvisioningState represents the current state of container service resource.
 type ProvisioningState string
-
-// AgentPoolProfileRole represents an agent role
-type AgentPoolProfileRole string
 
 // CustomKubeletConfig represents custom kubelet configurations for agent pool nodes
 type CustomKubeletConfig struct {
@@ -628,56 +604,24 @@ type SysctlConfig struct {
 
 // AgentPoolProfile represents an agent pool definition
 type AgentPoolProfile struct {
-	Name                                string               `json:"name"`
-	Count                               int                  `json:"count"`
-	VMSize                              string               `json:"vmSize"`
-	OSDiskSizeGB                        int                  `json:"osDiskSizeGB,omitempty"`
-	KubeletDiskType                     KubeletDiskType      `json:"kubeletDiskType,omitempty"`
-	DNSPrefix                           string               `json:"dnsPrefix,omitempty"`
-	OSType                              OSType               `json:"osType,omitempty"`
-	Ports                               []int                `json:"ports,omitempty"`
-	ProvisioningState                   ProvisioningState    `json:"provisioningState,omitempty"`
-	AvailabilityProfile                 string               `json:"availabilityProfile"`
-	ScaleSetPriority                    string               `json:"scaleSetPriority,omitempty"`
-	ScaleSetEvictionPolicy              string               `json:"scaleSetEvictionPolicy,omitempty"`
-	SpotMaxPrice                        *float64             `json:"spotMaxPrice,omitempty"`
-	StorageProfile                      string               `json:"storageProfile,omitempty"`
-	DiskSizesGB                         []int                `json:"diskSizesGB,omitempty"`
-	VnetSubnetID                        string               `json:"vnetSubnetID,omitempty"`
-	Subnet                              string               `json:"subnet"`
-	IPAddressCount                      int                  `json:"ipAddressCount,omitempty"`
-	Distro                              Distro               `json:"distro,omitempty"`
-	Role                                AgentPoolProfileRole `json:"role,omitempty"`
-	AcceleratedNetworkingEnabled        *bool                `json:"acceleratedNetworkingEnabled,omitempty"`
-	AcceleratedNetworkingEnabledWindows *bool                `json:"acceleratedNetworkingEnabledWindows,omitempty"`
-	VMSSOverProvisioningEnabled         *bool                `json:"vmssOverProvisioningEnabled,omitempty"`
-	FQDN                                string               `json:"fqdn,omitempty"`
-	CustomNodeLabels                    map[string]string    `json:"customNodeLabels,omitempty"`
-	PreprovisionExtension               *Extension           `json:"preProvisionExtension"`
-	Extensions                          []Extension          `json:"extensions"`
-	KubernetesConfig                    *KubernetesConfig    `json:"kubernetesConfig,omitempty"`
-	OrchestratorVersion                 string               `json:"orchestratorVersion"`
-	ImageRef                            *ImageReference      `json:"imageReference,omitempty"`
-	MaxCount                            *int                 `json:"maxCount,omitempty"`
-	MinCount                            *int                 `json:"minCount,omitempty"`
-	EnableAutoScaling                   *bool                `json:"enableAutoScaling,omitempty"`
-	AvailabilityZones                   []string             `json:"availabilityZones,omitempty"`
-	PlatformFaultDomainCount            *int                 `json:"platformFaultDomainCount"`
-	PlatformUpdateDomainCount           *int                 `json:"platformUpdateDomainCount"`
-	SinglePlacementGroup                *bool                `json:"singlePlacementGroup,omitempty"`
-	VnetCidrs                           []string             `json:"vnetCidrs,omitempty"`
-	PreserveNodesProperties             *bool                `json:"preserveNodesProperties,omitempty"`
-	WindowsNameVersion                  string               `json:"windowsNameVersion,omitempty"`
-	EnableVMSSNodePublicIP              *bool                `json:"enableVMSSNodePublicIP,omitempty"`
-	LoadBalancerBackendAddressPoolIDs   []string             `json:"loadBalancerBackendAddressPoolIDs,omitempty"`
-	AuditDEnabled                       *bool                `json:"auditDEnabled,omitempty"`
-	CustomVMTags                        map[string]string    `json:"customVMTags,omitempty"`
-	DiskEncryptionSetID                 string               `json:"diskEncryptionSetID,omitempty"`
-	UltraSSDEnabled                     *bool                `json:"ultraSSDEnabled,omitempty"`
-	EncryptionAtHost                    *bool                `json:"encryptionAtHost,omitempty"`
-	ProximityPlacementGroupID           string               `json:"proximityPlacementGroupID,omitempty"`
-	CustomKubeletConfig                 *CustomKubeletConfig `json:"customKubeletConfig,omitempty"`
-	CustomLinuxOSConfig                 *CustomLinuxOSConfig `json:"customLinuxOSConfig,omitempty"`
+	Name                  string               `json:"name"`
+	VMSize                string               `json:"vmSize"`
+	KubeletDiskType       KubeletDiskType      `json:"kubeletDiskType,omitempty"`
+	WorkloadRuntime       WorkloadRuntime      `json:"workloadRuntime,omitempty"`
+	DNSPrefix             string               `json:"dnsPrefix,omitempty"`
+	OSType                OSType               `json:"osType,omitempty"`
+	Ports                 []int                `json:"ports,omitempty"`
+	AvailabilityProfile   string               `json:"availabilityProfile"`
+	StorageProfile        string               `json:"storageProfile,omitempty"`
+	VnetSubnetID          string               `json:"vnetSubnetID,omitempty"`
+	Distro                Distro               `json:"distro,omitempty"`
+	CustomNodeLabels      map[string]string    `json:"customNodeLabels,omitempty"`
+	PreprovisionExtension *Extension           `json:"preProvisionExtension"`
+	KubernetesConfig      *KubernetesConfig    `json:"kubernetesConfig,omitempty"`
+	VnetCidrs             []string             `json:"vnetCidrs,omitempty"`
+	WindowsNameVersion    string               `json:"windowsNameVersion,omitempty"`
+	CustomKubeletConfig   *CustomKubeletConfig `json:"customKubeletConfig,omitempty"`
+	CustomLinuxOSConfig   *CustomLinuxOSConfig `json:"customLinuxOSConfig,omitempty"`
 }
 
 // Properties represents the AKS cluster definition
@@ -770,29 +714,6 @@ func (p *Properties) HasWindows() bool {
 	return false
 }
 
-// TotalNodes returns the total number of nodes in the cluster configuration
-func (p *Properties) TotalNodes() int {
-	var totalNodes int
-	for _, pool := range p.AgentPoolProfiles {
-		totalNodes += pool.Count
-	}
-	return totalNodes
-}
-
-// HasAvailabilityZones returns true if the cluster contains a profile with zones
-func (p *Properties) HasAvailabilityZones() bool {
-	hasZones := false
-	if p.AgentPoolProfiles != nil {
-		for _, agentPoolProfile := range p.AgentPoolProfiles {
-			if agentPoolProfile.HasAvailabilityZones() {
-				hasZones = true
-				break
-			}
-		}
-	}
-	return hasZones
-}
-
 // IsAKSCustomCloud checks if it's in AKS custom cloud
 func (p *Properties) IsAKSCustomCloud() bool {
 	return p.CustomCloudEnv != nil &&
@@ -833,16 +754,6 @@ func (p *Properties) GetClusterID() string {
 		mutex.Unlock()
 	}
 	return p.ClusterID
-}
-
-// AnyAgentIsLinux checks whether any of the agents in the AgentPools are linux
-func (p *Properties) AnyAgentIsLinux() bool {
-	for _, agentProfile := range p.AgentPoolProfiles {
-		if agentProfile.IsLinux() {
-			return true
-		}
-	}
-	return false
 }
 
 // AreAgentProfilesCustomVNET returns true if all of the agent profiles in the clusters are configured with VNET.
@@ -1051,16 +962,6 @@ func (a *AgentPoolProfile) IsVHDDistro() bool {
 	return a.Distro.IsVHDDistro()
 }
 
-// HasAvailabilityZones returns true if the agent pool has availability zones
-func (a *AgentPoolProfile) HasAvailabilityZones() bool {
-	return a.AvailabilityZones != nil && len(a.AvailabilityZones) > 0
-}
-
-// IsLinux returns true if the agent pool is linux
-func (a *AgentPoolProfile) IsLinux() bool {
-	return strings.EqualFold(string(a.OSType), string(Linux))
-}
-
 // IsCustomVNET returns true if the customer brought their own VNET
 func (a *AgentPoolProfile) IsCustomVNET() bool {
 	return len(a.VnetSubnetID) > 0
@@ -1081,13 +982,8 @@ func (a *AgentPoolProfile) IsAvailabilitySets() bool {
 	return strings.EqualFold(a.AvailabilityProfile, AvailabilitySet)
 }
 
-// IsSpotScaleSet returns true if the VMSS is Spot Scale Set
-func (a *AgentPoolProfile) IsSpotScaleSet() bool {
-	return strings.EqualFold(a.AvailabilityProfile, VirtualMachineScaleSets) && strings.EqualFold(a.ScaleSetPriority, ScaleSetPrioritySpot)
-}
-
 // GetKubernetesLabels returns a k8s API-compliant labels string for nodes in this profile
-func (a *AgentPoolProfile) GetKubernetesLabels(rg string, deprecated bool, nvidiaEnabled bool, controlPlane bool) string {
+func (a *AgentPoolProfile) GetKubernetesLabels(rg string, deprecated bool, nvidiaEnabled bool, fipsEnabled bool, osSku string, controlPlane bool) string {
 	var buf bytes.Buffer
 	if controlPlane {
 		buf.WriteString("kubernetes.azure.com/role=master")
@@ -1107,6 +1003,12 @@ func (a *AgentPoolProfile) GetKubernetesLabels(rg string, deprecated bool, nvidi
 		accelerator := "nvidia"
 		buf.WriteString(fmt.Sprintf(",accelerator=%s", accelerator))
 	}
+	if fipsEnabled {
+		buf.WriteString(",kubernetes.azure.com/fips_enabled=true")
+	}
+	if osSku != "" {
+		buf.WriteString(fmt.Sprintf(",kubernetes.azure.com/os-sku=%s", osSku))
+	}
 	buf.WriteString(fmt.Sprintf(",kubernetes.azure.com/cluster=%s", rg))
 	keys := []string{}
 	for key := range a.CustomNodeLabels {
@@ -1117,16 +1019,6 @@ func (a *AgentPoolProfile) GetKubernetesLabels(rg string, deprecated bool, nvidi
 		buf.WriteString(fmt.Sprintf(",%s=%s", key, a.CustomNodeLabels[key]))
 	}
 	return buf.String()
-}
-
-// HasDisks returns true if the customer specified disks
-func (a *AgentPoolProfile) HasDisks() bool {
-	return len(a.DiskSizesGB) > 0
-}
-
-// IsAuditDEnabled returns true if the master profile is configured for auditd
-func (a *AgentPoolProfile) IsAuditDEnabled() bool {
-	return to.Bool(a.AuditDEnabled)
 }
 
 // HasSecrets returns true if the customer specified secrets to install
@@ -1144,30 +1036,10 @@ func (l *LinuxProfile) HasSearchDomain() bool {
 	return false
 }
 
-// GetAPIServerEtcdAPIVersion Used to set apiserver's etcdapi version
-func (o *OrchestratorProfile) GetAPIServerEtcdAPIVersion() string {
-	if o.KubernetesConfig != nil {
-		// if we are here, version has already been validated..
-		etcdVersion, _ := semver.Make(o.KubernetesConfig.EtcdVersion)
-		return "etcd" + strconv.FormatUint(etcdVersion.Major, 10)
-	}
-	return ""
-}
-
 // IsAzureCNI returns true if Azure CNI network plugin is enabled
 func (o *OrchestratorProfile) IsAzureCNI() bool {
 	if o.KubernetesConfig != nil {
 		return strings.EqualFold(o.KubernetesConfig.NetworkPlugin, NetworkPluginAzure)
-	}
-	return false
-}
-
-// HasCustomNodesDNS returns true if the customer specified a dns server
-func (l *LinuxProfile) HasCustomNodesDNS() bool {
-	if l.CustomNodesDNS != nil {
-		if l.CustomNodesDNS.DNSServer != "" {
-			return true
-		}
 	}
 	return false
 }
@@ -1246,17 +1118,17 @@ func (w *WindowsProfile) IsAlwaysPullWindowsPauseImage() bool {
 	return w.AlwaysPullWindowsPauseImage != nil && *w.AlwaysPullWindowsPauseImage
 }
 
+// IsWindowsSecureTlsEnabled returns true if secure TLS should be enabled for Windows nodes
+func (w *WindowsProfile) IsWindowsSecureTlsEnabled() bool {
+	if w.WindowsSecureTlsEnabled != nil {
+		return *w.WindowsSecureTlsEnabled
+	}
+	return DefaultWindowsSecureTlsEnabled
+}
+
 // IsKubernetes returns true if this template is for Kubernetes orchestrator
 func (o *OrchestratorProfile) IsKubernetes() bool {
 	return strings.EqualFold(o.OrchestratorType, Kubernetes)
-}
-
-// IsPrivateCluster returns true if this deployment is a private cluster
-func (o *OrchestratorProfile) IsPrivateCluster() bool {
-	if !o.IsKubernetes() {
-		return false
-	}
-	return o.KubernetesConfig != nil && o.KubernetesConfig.PrivateCluster != nil && to.Bool(o.KubernetesConfig.PrivateCluster.Enabled)
 }
 
 // IsFeatureEnabled returns true if a feature flag is on for the provided feature
@@ -1381,22 +1253,26 @@ func (k *KubernetesConfig) GetAzureCNIURLWindows(cloudSpecConfig *AzureEnvironme
 }
 
 // GetOrderedKubeletConfigStringForPowershell returns an ordered string of key/val pairs for Powershell script consumption
-func (k *KubernetesConfig) GetOrderedKubeletConfigStringForPowershell() string {
+func (config *NodeBootstrappingConfiguration) GetOrderedKubeletConfigStringForPowershell() string {
+	if config.KubeletConfig == nil {
+		return ""
+	}
+
 	keys := []string{}
-	for key := range k.KubeletConfig {
+	for key := range config.KubeletConfig {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	var buf bytes.Buffer
 	for _, key := range keys {
-		buf.WriteString(fmt.Sprintf("\"%s=%s\", ", key, k.KubeletConfig[key]))
+		buf.WriteString(fmt.Sprintf("\"%s=%s\", ", key, config.KubeletConfig[key]))
 	}
 	return strings.TrimSuffix(buf.String(), ", ")
 }
 
 // NeedsTLSBoostraping returns true if flag --bootstrap-kubeconfig is passed to kubelet
-func (k *KubernetesConfig) NeedsTLSBoostraping() bool {
-	_, ok := k.KubeletConfig["--bootstrap-kubeconfig"]
+func (config *NodeBootstrappingConfiguration) NeedsTLSBoostraping() bool {
+	_, ok := config.KubeletConfig["--bootstrap-kubeconfig"]
 	return ok
 }
 
@@ -1459,6 +1335,7 @@ type NodeBootstrappingConfiguration struct {
 	SubscriptionID                string
 	ResourceGroupName             string
 	UserAssignedIdentityClientID  string
+	OSSKU                         string
 	ConfigGPUDriverIfNeeded       bool
 	Disable1804SystemdResolved    bool
 	EnableGPUDevicePluginIfNeeded bool
@@ -1466,7 +1343,37 @@ type NodeBootstrappingConfiguration struct {
 	EnableNvidia                  bool
 	EnableACRTeleportPlugin       bool
 	TeleportdPluginURL            string
-	BootstrapToken                string
+	ContainerdVersion             string
+	RuncVersion                   string
+	// KubeletClientTLSBootstrapToken - kubelet client TLS bootstrap token to use.
+	// When this feature is enabled, we skip kubelet kubeconfig generation and replace it with bootstrap kubeconfig.
+	// ref: https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping
+	KubeletClientTLSBootstrapToken *string
+	FIPSEnabled                    bool
+	HTTPProxyConfig                *HTTPProxyConfig
+	KubeletConfig                  map[string]string
+	EnableRuncShimV2               bool
+	GPUInstanceProfile             string
+	PrimaryScaleSetName            string
+	SIGConfig                      SIGConfig
+	BootstrapToken                 string
+	EtcdVersion                    string
+}
+
+// NodeBootstrapping represents the custom data, CSE, and OS image info needed for node bootstrapping.
+type NodeBootstrapping struct {
+	CustomData     string
+	CSE            string
+	OSImageConfig  *AzureOSImageConfig
+	SigImageConfig *SigImageConfig
+}
+
+// HTTPProxyConfig represents configurations of http proxy
+type HTTPProxyConfig struct {
+	HTTPProxy  *string   `json:"httpProxy,omitempty"`
+	HTTPSProxy *string   `json:"httpsProxy,omitempty"`
+	NoProxy    *[]string `json:"noProxy,omitempty"`
+	TrustedCA  *string   `json:"trustedCa,omitempty"`
 }
 
 // AKSKubeletConfiguration contains the configuration for the Kubelet that AKS set
@@ -1842,4 +1749,48 @@ type KubeletWebhookAuthorization struct {
 	// cacheUnauthorizedTTL is the duration to cache 'unauthorized' responses from the webhook authorizer.
 	// +optional
 	CacheUnauthorizedTTL Duration `json:"cacheUnauthorizedTTL,omitempty"`
+}
+type CSEStatus struct {
+	// ExitCode stores the exitCode from CSE output.
+	ExitCode string `json:"exitCode,omitempty"`
+	// Output stores the output from CSE output.
+	Output string `json:"output,omitempty"`
+	// Error stores the error from CSE output.
+	Error string `json:"error,omitempty"`
+	// ExecDuration stores the execDuration in seconds from CSE output.
+	ExecDuration string `json:"execDuration,omitempty"`
+	// KernelStartTime of current boot, output from systemctl show -p KernelTimestamp
+	KernelStartTime string `json:"kernelStartTime,omitempty"`
+	// SystemdSummary of current boot, output from systemd-analyze
+	SystemdSummary string `json:"systemdSummary,omitempty"`
+	// CSEStartTime indicate starttime of CSE
+	CSEStartTime string `json:"cseStartTime,omitempty"`
+	// GuestAgentStartTime indicate starttime of GuestAgent, output from systemctl show walinuxagent.service -p ExecMainStartTimestamp
+	GuestAgentStartTime string `json:"guestAgentStartTime,omitempty"`
+	// BootDatapoints contains datapoints (key-value pair) from VM boot process.
+	BootDatapoints map[string]string `json:"bootDatapoints,omitempty"`
+}
+
+type CSEStatusParsingErrorCode string
+
+const (
+	// CSEMessageUnmarshalError is the error code for unmarshal cse message
+	CSEMessageUnmarshalError CSEStatusParsingErrorCode = "CSEMessageUnmarshalError"
+	// CSEMessageExitCodeEmptyError is the error code for empty cse message exit code
+	CSEMessageExitCodeEmptyError CSEStatusParsingErrorCode = "CSEMessageExitCodeEmptyError"
+	// InvalidCSEMessage is the error code for cse invalid message
+	InvalidCSEMessage CSEStatusParsingErrorCode = "InvalidCSEMessage"
+)
+
+type CSEStatusParsingError struct {
+	Code    CSEStatusParsingErrorCode
+	Message string
+}
+
+func NewError(code CSEStatusParsingErrorCode, message string) *CSEStatusParsingError {
+	return &CSEStatusParsingError{Code: code, Message: message}
+}
+
+func (err *CSEStatusParsingError) Error() string {
+	return fmt.Sprintf("CSE has invalid message=%q, InstanceErrorCode=%s", err.Message, err.Code)
 }

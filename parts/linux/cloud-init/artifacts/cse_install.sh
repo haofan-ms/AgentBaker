@@ -102,7 +102,7 @@ installSGXDrivers() {
 
 installContainerRuntime() {
     {{if NeedsContainerd}}
-        installStandaloneContainerd
+        installStandaloneContainerd ${CONTAINERD_VERSION}
     {{end}}
     {{if NeedsDocker}}
         installMoby
@@ -293,6 +293,20 @@ extractHyperkube() {
 
     cp "$path/hyperkube" "/usr/local/bin/kubelet-${KUBERNETES_VERSION}"
     mv "$path/hyperkube" "/usr/local/bin/kubectl-${KUBERNETES_VERSION}"    
+}
+
+extractEtcdctl() {
+	ETCD_URL=mcr.microsoft.com/oss/etcd-io/etcd:{{EtcdVersion}}
+    path="/tmp/etcdctl-downloads/{{EtcdVersion}}"
+    mkdir -p "$path"
+
+    if [[ "$CLI_TOOL" == "crictl" ]]; then    
+		ctr --namespace k8s.io run --rm --mount type=bind,src=$path,dst=$path,options=bind:rw ${ETCD_URL} extractTask /bin/sh -c "cp /usr/local/bin/etcdctl $path"
+    else 
+        docker run --rm --entrypoint "" -v $path:$path ${ETCD_URL} /bin/sh -c "cp /usr/local/bin/etcdctl $path"
+    fi
+
+    mv "$path/etcdctl" "/usr/local/bin/etcdctl"
 }
 
 installKubeletKubectlKubeadmAndKubeProxy() {

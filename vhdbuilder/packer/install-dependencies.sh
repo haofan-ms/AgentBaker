@@ -58,13 +58,27 @@ installMoby
 echo "  - moby v${MOBY_VERSION}" >> ${VHD_LOGS_FILEPATH}
 cliTool="docker"
 
+MOBY_VERSION="19.03.14"
+installMoby
+echo "  - moby v${MOBY_VERSION}" >> ${VHD_LOGS_FILEPATH}
+cliTool="docker"
+
 if [[ ${CONTAINER_RUNTIME:-""} == "containerd" ]]; then
   echo "VHD will be built with containerd as the container runtime"
-  CONTAINERD_VERSION="1.4.3"
-  installStandaloneContainerd
-  echo "  - containerd v${CONTAINERD_VERSION}" >> ${VHD_LOGS_FILEPATH}
-  CRICTL_VERSIONS=("1.20.0" "1.21.0")
-  for CRICTL_VERSION in ${CRICTL_VERSIONS[@]}; do
+  containerd_version="1.4.8"
+  installStandaloneContainerd ${containerd_version}
+  echo "  - [installed] containerd v${containerd_version}" >> ${VHD_LOGS_FILEPATH}
+  if [[ $OS == $UBUNTU_OS_NAME ]]; then
+    # also pre-cache containerd 1.4.4 (last used version)
+    containerd_version="1.4.4"
+    downloadContainerd ${containerd_version}
+    echo "  - [cached] containerd v${containerd_version}" >> ${VHD_LOGS_FILEPATH}
+  fi
+  CRICTL_VERSIONS="
+  1.20.0
+  1.21.0
+  "
+  for CRICTL_VERSION in ${CRICTL_VERSIONS}; do
     downloadCrictl ${CRICTL_VERSION}
     echo "  - crictl version ${CRICTL_VERSION}" >> ${VHD_LOGS_FILEPATH}
   done
@@ -74,6 +88,21 @@ if [[ ${CONTAINER_RUNTIME:-""} == "containerd" ]]; then
 
   # also pre-download Teleportd plugin for containerd
   # downloadTeleportdPlugin ${TELEPORTD_PLUGIN_DOWNLOAD_URL} "0.6.0"
+fi
+
+INSTALLED_RUNC_VERSION=$(runc --version | head -n1 | sed 's/runc version //')
+echo "  - runc version ${INSTALLED_RUNC_VERSION}" >> ${VHD_LOGS_FILEPATH}
+
+## for ubuntu-based images, cache multiple versions of runc
+if [[ $OS == $UBUNTU_OS_NAME ]]; then
+  RUNC_VERSIONS="
+  1.0.0-rc92
+  1.0.0-rc95
+  "
+  for RUNC_VERSION in $RUNC_VERSIONS; do
+    downloadDebPkgToFile "moby-runc" ${RUNC_VERSION/\-/\~} ${RUNC_DOWNLOADS_DIR}
+    echo "  - [cached] runc ${RUNC_VERSION}" >> ${VHD_LOGS_FILEPATH}
+  done
 fi
 
 installBpftrace
@@ -513,6 +542,10 @@ done
 # need to cover previously supported version for VMAS scale up scenario
 # So keeping as many versions as we can - those unsupported version can be removed when we don't have enough space
 # below are the required to support versions
+# v1.20.13
+# v1.21.7
+# v1.21.4
+# NOTE that we keep multiple files per k8s patch version as kubeproxy version is decided by CCP.
 
 # NOTE that we only keep the latest one per k8s patch version as kubelet/kubectl is decided by VHD version
 K8S_VERSIONS="
@@ -553,19 +586,17 @@ ls -ltr /usr/local/bin/* >> ${VHD_LOGS_FILEPATH}
 # this is used by kube-proxy and need to cover previously supported version for VMAS scale up scenario
 # So keeping as many versions as we can - those unsupported version can be removed when we don't have enough space
 # below are the required to support versions
-
-container_image_url_trim() {
-  echo ${1//$2/}
-}
-
-# NOTE that we keep multiple files per k8s patch version as kubeproxy version is decided by CCP.
-PATCHED_HYPERKUBE_IMAGES="
+# v1.20.13
+# v1.21.7
+# NOTE that we only keep the latest one per k8s patch version as kubelet/kubectl is decided by VHD version
+# Please do not use the .1 suffix, because that's only for the base image patches
+KUBE_BINARY_VERSIONS="
 1.20.13-azs
 1.21.7-azs
 "
-for KUBERNETES_VERSION in ${PATCHED_HYPERKUBE_IMAGES}; do
-  # Only need to store k8s components >= 1.19 for containerd VHDs
-  if (($(echo ${KUBERNETES_VERSION} | cut -d"." -f2) < 19)) && [[ ${CONTAINER_RUNTIME} == "containerd" ]]; then
+for PATCHED_KUBE_BINARY_VERSION in ${KUBE_BINARY_VERSIONS}; do
+  if (($(echo ${PATCHED_KUBE_BINARY_VERSION} | cut -d"." -f2) < 19)) && [[ ${CONTAINER_RUNTIME} == "containerd" ]]; then
+    echo "Only need to store k8s components >= 1.19 for containerd VHDs"
     continue
   fi
   # TODO: after CCP chart is done, change below to get hyperkube only for versions less than 1.17 only

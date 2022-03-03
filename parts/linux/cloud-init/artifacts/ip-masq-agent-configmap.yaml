@@ -13,3 +13,4 @@ data:
       - 168.63.129.16/32{{end}}
     masqLinkLocal: {{IsAzureCNI}}
     resyncInterval: 60s
+#EOF

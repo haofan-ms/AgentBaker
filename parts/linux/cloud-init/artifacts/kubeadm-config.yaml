@@ -6,6 +6,12 @@ etcd:
     imageRepository: mcr.microsoft.com/oss/etcd-io
     imageTag: {{EtcdVersion}}
     dataDir: /var/lib/etcddisk/etcd
+    extraArgs:
+      election-timeout: "2500"
+      heartbeat-interval: "250"
+      snapshot-count: "5000"
+      auto-tls: "false"
+      peer-auto-tls: "false"
 networking:
   podSubnet: {{PodCIDR}}
   serviceSubnet: {{ServiceCidr}}
@@ -20,6 +26,10 @@ apiServer:
     audit-log-maxage: "30"
     audit-log-maxbackup: "10"
     audit-log-maxsize: "100"
+    enable-admission-plugins: NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,DefaultTolerationSeconds,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota,PodNodeSelector,PodTolerationRestriction,ExtendedResourceToleration,PodSecurityPolicy
+    tls-min-version: VersionTLS12
+    tls-cipher-suites: TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+    request-timeout: 1m0s
   extraVolumes:
   - hostPath: /etc/kubernetes/azure.json
     mountPath: /etc/kubernetes/azure.json
@@ -36,6 +46,7 @@ apiServer:
   certSANs:
   - 127.0.0.1
   - localhost
+  - {{InternalLoadBalancerIP}}
   timeoutForControlPlane: 7m0s
 controllerManager:
   extraArgs:
@@ -44,6 +55,8 @@ controllerManager:
     cloud-config: /etc/kubernetes/azure.json
     cloud-provider: azure
     cluster-name: {{ResourceGroupName}}
+    tls-min-version: VersionTLS12
+    profiling: "false"
   extraVolumes:
   - hostPath: /etc/kubernetes/azure.json
     mountPath: /etc/kubernetes/azure.json
@@ -53,6 +66,9 @@ controllerManager:
     mountPath: /etc/kubernetes/{{GetTargetEnvironment}}.json
     name: cloud-config-stack
     readOnly: true
+scheduler:
+  extraArgs:
+    tls-min-version: VersionTLS12
 dns:
   type: CoreDNS
 imageRepository: mcr.microsoft.com/oss/kubernetes
@@ -69,6 +85,7 @@ bootstrapTokens:
   groups:
   - system:bootstrappers:kubeadm:default-node-token
 nodeRegistration:
+  criSocket: /run/containerd/containerd.sock
   taints:
   - effect: NoSchedule
     key: node-role.kubernetes.io/master
@@ -87,6 +104,7 @@ localAPIEndpoint:
 apiVersion: kubeadm.k8s.io/v1beta2
 kind: JoinConfiguration
 nodeRegistration:
+  criSocket: /run/containerd/containerd.sock
   taints:
   - effect: NoSchedule
     key: node-role.kubernetes.io/master
@@ -115,4 +133,9 @@ kind: KubeletConfiguration
 clusterDNS:
 - {{DNSServiceIP}}
 maxPods: {{MaxPods}}
+readOnlyPort: 0
+protectKernelDefaults: true
+streamingConnectionIdleTimeout: 4h
+tlsCertFile: "/etc/kubernetes/certs/kubeletserver.crt"
+tlsPrivateKeyFile: "/etc/kubernetes/certs/kubeletserver.key"
 #EOF

@@ -802,6 +802,15 @@ write_files:
     #EOF
 
 {{if IsControlPlane}}
+{{- if IsKubernetesVersionGe "1.22.0"}}
+- path: /etc/kubernetes/manifests/cloud-controller-manager.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "cloudcontrollermanager"}}
+{{- end}}
+
 - path: /etc/kubernetes/kubeadm-config.yaml
   permissions: "0600"
   encoding: gzip

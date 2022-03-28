@@ -38,6 +38,7 @@ func getCustomDataVariables(config *datamodel.NodeBootstrappingConfiguration) pa
 			"migPartitionSystemdService":     getBase64EncodedGzippedCustomScript(migPartitionSystemdService, config),
 			"migPartitionScript":             getBase64EncodedGzippedCustomScript(migPartitionScript, config),
 			"kubeadmconfig":                  getBase64EncodedGzippedCustomScript(kubeadmConfig, config),
+			"cloudcontrollermanager":         getBase64EncodedGzippedCustomScript(cloudControllerManager, config),
 			"ipMasqAgentConfigmap":           getBase64EncodedGzippedCustomScript(ipMasqAgentConfigmap, config),
 			"corednsAddonManifest":           getBase64EncodedGzippedCustomScript(corednsAddonManifest, config),
 			"kubeproxyAddonManifest":         getBase64EncodedGzippedCustomScript(kubeproxyAddonManifest, config),

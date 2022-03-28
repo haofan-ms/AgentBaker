@@ -320,6 +320,24 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 			return config.ContainerService.Properties.OrchestratorProfile.KubernetesConfig.DNSServiceIP
 		},
 		// TODO ASH DELETE
+		"CloudProvider": func() string {
+			if IsKubernetesVersionGe(cs.Properties.OrchestratorProfile.OrchestratorVersion, "1.22.0") {
+				return "external"
+			}
+			return "azure"
+		},
+		// TODO ASH DELETE
+		"ClusterName": func() string {
+			return cs.Properties.HostedMasterProfile.DNSPrefix
+		},
+		// TODO ASH DELETE
+		"KubeadmApiVersion": func() string {
+			if IsKubernetesVersionGe(cs.Properties.OrchestratorProfile.OrchestratorVersion, "1.22.0") {
+				return "kubeadm.k8s.io/v1beta3"
+			}
+			return "kubeadm.k8s.io/v1beta2"
+		},
+		// TODO ASH DELETE
 		"NetworkPluging": func() string {
 			if cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPlugin == NetworkPluginKubenet {
 				return "kubenet"
@@ -356,6 +374,9 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 			}
 			if cs.Properties.OrchestratorProfile.KubernetesConfig.NetworkPolicy == NetworkPolicyAzure {
 				addons = append(addons, "/etc/kubernetes/addons/azure-network-policy.yaml")
+			}
+			if IsKubernetesVersionGe(cs.Properties.OrchestratorProfile.OrchestratorVersion, "1.22.0") {
+				addons = append(addons, "/etc/kubernetes/addons/cloud-node-manager.yaml")
 			}
 			return strings.Join(addons, " ")
 		},

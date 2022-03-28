@@ -45,7 +45,7 @@ customizeK8s() {
 
         retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase certs all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
         retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase kubeconfig all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
-        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase control-plane all --config ${CONFIG} --experimental-patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase control-plane all --config ${CONFIG} --patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
         retrycmd_if_failure_no_stats 10 15 300 kubeadm init --config ${CONFIG} --skip-phases=certs,kubeconfig,control-plane,addon --ignore-preflight-errors=all -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
         # TODO Remove line below once /etc/kubernetes/addons/psp.yaml is baked
@@ -99,7 +99,7 @@ customizeK8s() {
             retrycmd_if_failure_no_stats 10 15 30 kubectl apply -f /etc/kubernetes/addons/coredns.yaml --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
         fi
 
-        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare control-plane --config ${CONFIG} --experimental-patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare control-plane --config ${CONFIG} --patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
         retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase kubelet-start --config ${CONFIG} -v 9 || exit $ERR_KUBELET_START_FAIL
         retrycmd_if_failure_no_stats 10 15 300 kubeadm join phase control-plane-join all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
         retrycmd_if_failure_no_stats 10 15 180 kubectl uncordon ${NODE_NAME} --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_KUBEADM_INIT_JOIN

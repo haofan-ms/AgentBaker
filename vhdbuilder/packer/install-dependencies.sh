@@ -116,6 +116,8 @@ if [[ ${CONTAINER_RUNTIME:-""} == "containerd" ]]; then
   CRICTL_VERSIONS="
   1.20.0
   1.21.0
+  1.22.0
+  1.23.0
   "
   for CRICTL_VERSION in ${CRICTL_VERSIONS}; do
     downloadCrictl ${CRICTL_VERSION}
@@ -162,6 +164,12 @@ for imageToBePulled in ${ContainerImages[*]}; do
     CONTAINER_IMAGE=$(string_replace $downloadURL $version)
     pullContainerImage ${cliTool} ${CONTAINER_IMAGE}
     echo "  - ${CONTAINER_IMAGE}" >> ${VHD_LOGS_FILEPATH}
+    for component in kube-apiserver kube-controller-manager kube-scheduler; do
+      if grep -iq $component <<< ${downloadURL} && [[ ${version} != *"-azs"* ]]; then
+        retagContainerImage ${cliTool} ${CONTAINER_IMAGE} "${CONTAINER_IMAGE}-azs"
+        echo "Retagging image from ${CONTAINER_IMAGE} to ${CONTAINER_IMAGE}-azs..."
+      fi
+    done
   done
 done
 
@@ -226,6 +234,10 @@ for KUBE_PROXY_IMAGE_VERSION in ${KUBE_PROXY_IMAGE_VERSIONS}; do
   exit 99
   fi
   echo "  - ${CONTAINER_IMAGE}" >>${VHD_LOGS_FILEPATH}
+  if [[ ${KUBE_PROXY_IMAGE_VERSION} != *"-azs"* ]]; then
+    retagContainerImage ${cliTool} ${CONTAINER_IMAGE} "${CONTAINER_IMAGE}-azs"
+    echo "Retagging image from ${CONTAINER_IMAGE} to ${CONTAINER_IMAGE}-azs..."
+  fi
 done
 
 # kubelet and kubectl
@@ -234,11 +246,15 @@ done
 # below are the required to support versions
 # v1.20.13
 # v1.21.7
+# v1.22.6
+# v1.23.3
 # NOTE that we only keep the latest one per k8s patch version as kubelet/kubectl is decided by VHD version
 # Please do not use the .1 suffix, because that's only for the base image patches
 KUBE_BINARY_VERSIONS="
 1.20.13-azs
 1.21.7-azs
+1.22.6
+1.23.3
 "
 for PATCHED_KUBE_BINARY_VERSION in ${KUBE_BINARY_VERSIONS}; do
   if (($(echo ${PATCHED_KUBE_BINARY_VERSION} | cut -d"." -f2) < 19)) && [[ ${CONTAINER_RUNTIME} == "containerd" ]]; then

@@ -277,6 +277,11 @@
     },
     {
       "type": "file",
+      "source": "vhdbuilder/static/cloud-node-manager.yaml",
+      "destination": "/home/packer/cloud-node-manager.yaml"
+    },
+    {
+      "type": "file",
       "source": "vhdbuilder/static/azuredisk-csi-driver.yaml",
       "destination": "/home/packer/azuredisk-csi-driver.yaml"
     },

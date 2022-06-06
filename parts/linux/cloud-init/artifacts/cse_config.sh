@@ -37,6 +37,10 @@ customizeK8s() {
         FIRST_MASTER_NODE=false
     fi  
 
+    {{if not (IsKubernetesVersionGe "1.22.0")}}
+    PATCHES='--experimental-patches /etc/kubernetes/patches'
+    {{end}}
+
     if [ "${FIRST_MASTER_NODE}" = true ]; then
         local ADDON_CONFIG=$(mktemp)
         OLD="controlPlaneEndpoint: ${API_SERVER_NAME}"
@@ -45,7 +49,7 @@ customizeK8s() {
 
         retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase certs all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
         retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase kubeconfig all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
-        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase control-plane all --config ${CONFIG} --patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase control-plane all --config ${CONFIG} ${PATCHES} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
         retrycmd_if_failure_no_stats 10 15 300 kubeadm init --config ${CONFIG} --skip-phases=certs,kubeconfig,control-plane,addon --ignore-preflight-errors=all -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
         # TODO Remove line below once /etc/kubernetes/addons/psp.yaml is baked
@@ -75,12 +79,17 @@ customizeK8s() {
         if [ $UPGRADE == 1 ] ; then
             CUR_MINOR=$(grep -oh "v1.[0-9]*.[0-9]*-azs$" /tmp/kubeadm-config.yaml | grep -oh "\.[0-9][0-9]\." | grep -o [0-9][0-9])
             NEW_MINOR=$(echo {{KubernetesVersion}} | grep -oh "\.[0-9][0-9]\." | grep -o [0-9][0-9])
+            {{if IsKubernetesVersionGe "1.23.0"}}
+            NEW_KUBELET_CONFIG="kubelet-config"
+            {{else}}
+            NEW_KUBELET_CONFIG="kubelet-config-1.${NEW_MINOR}"
+            {{end}}
 
             echo "upgrading control plane node to kubernetes v{{KubernetesVersion}}"
-            kubectl create role kubeadm:kubelet-config-1.${NEW_MINOR} -n kube-system --verb=get --resource=configmaps --resource-name=kubelet-config-1.${NEW_MINOR} --dry-run=client -o yaml \
+            kubectl create role kubeadm:${NEW_KUBELET_CONFIG} -n kube-system --verb=get --resource=configmaps --resource-name=${NEW_KUBELET_CONFIG} --dry-run=client -o yaml \
             | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
             
-            kubectl create rolebinding kubeadm:kubelet-config-1.${NEW_MINOR} -n kube-system --role=kubeadm:kubelet-config-1.${NEW_MINOR} --group=system:nodes --group=system:bootstrappers:kubeadm:default-node-token --dry-run=client -o yaml \
+            kubectl create rolebinding kubeadm:${NEW_KUBELET_CONFIG} -n kube-system --role=kubeadm:${NEW_KUBELET_CONFIG} --group=system:nodes --group=system:bootstrappers:kubeadm:default-node-token --dry-run=client -o yaml \
             | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
             kubectl create clusterrole kubeadm:get-nodes --verb=get --resource=nodes --dry-run=client -o yaml \
@@ -91,15 +100,28 @@ customizeK8s() {
 
             retrycmd_if_failure_no_stats 10 15 30 kubectl get cm kubelet-config-1.${CUR_MINOR} -n kube-system -o yaml --kubeconfig ${KUBECONFIG} > kubelet-config.yaml || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
-            sed "/resourceVersion/d" kubelet-config.yaml | sed "s/kubelet-config-1.${CUR_MINOR}/kubelet-config-1.${NEW_MINOR}/1" \
+            sed "/resourceVersion/d" kubelet-config.yaml | sed "s/kubelet-config-1.${CUR_MINOR}/${NEW_KUBELET_CONFIG}/1" \
             | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
             retrycmd_if_failure_no_stats 10 15 30 kubectl replace -n kube-system cm kubeadm-conf -f /tmp/kubeadm-upgrade.yaml --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
             retrycmd_if_failure_no_stats 10 15 30 kubectl apply -f /etc/kubernetes/addons/coredns.yaml --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
+
         fi
 
-        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare control-plane --config ${CONFIG} --patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        {{if IsKubernetesVersionGe "1.23.0"}}
+        extractEtcdctl || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MEMBERLIST
+        masterNodes=$(kubectl get node -o wide --kubeconfig ${KUBECONFIG} | grep -oE "aks-master-\S+")
+        etcdMemberID=$(etcdctl --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --endpoints https://aks-master-{{GetClusterID}}-0:2379,https://aks-master-{{GetClusterID}}-1:2379,https://aks-master-{{GetClusterID}}-2:2379 member list | grep $(hostname) | sed 's/,.*//')
+        if [ -n "${etcdMemberID}" ]; then
+            echo "Removing etcdMember ${etcdMemberID} for $(hostname)"
+            etcdctl --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --endpoints https://aks-master-{{GetClusterID}}-0:2379,https://aks-master-{{GetClusterID}}-1:2379,https://aks-master-{{GetClusterID}}-2:2379 member remove ${etcdMemberID} || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MEMBERLIST
+        fi
+        echo "Removing etcd data directory"
+        rm -rf /var/lib/etcddisk/etcd/
+        {{end}}
+
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare control-plane --config ${CONFIG} ${PATCHES} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
         retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase kubelet-start --config ${CONFIG} -v 9 || exit $ERR_KUBELET_START_FAIL
         retrycmd_if_failure_no_stats 10 15 300 kubeadm join phase control-plane-join all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
         retrycmd_if_failure_no_stats 10 15 180 kubectl uncordon ${NODE_NAME} --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_KUBEADM_INIT_JOIN

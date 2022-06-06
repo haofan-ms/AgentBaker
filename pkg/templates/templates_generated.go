@@ -399,7 +399,7 @@ spec:
       - args:
         - -conf
         - /etc/coredns/Corefile
-        image: mcr.microsoft.com/oss/kubernetes/coredns:1.7.0
+        image: mcr.microsoft.com/oss/kubernetes/coredns:1.8.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 5

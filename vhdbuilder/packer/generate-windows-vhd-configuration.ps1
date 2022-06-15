@@ -1,6 +1,9 @@
 # MUST define global variable with "global"
 # This script is used to generate shared configuration for configure-windows-vhd.ps1 and windows-vhd-content-test.ps1.
 # MUST NOT add any shared functions in this script.
+
+# Removed 'mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021' and 'mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021-2' images for windowsSKU '2019' as OS disk out of space during VHD build
+
 $windowsConfig = @'
 $global:containerRuntime = $env:ContainerRuntime
 $validContainerRuntimes = @("containerd", "docker")
@@ -43,8 +46,7 @@ switch ($windowsSKU) {
             "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.10.0",
             "mcr.microsoft.com/oss/kubernetes-csi/secrets-store/driver:v0.0.21",
             "mcr.microsoft.com/oss/azure/secrets-store/provider-azure:0.0.14",
-            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.23.3",
-            "mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021-2")
+            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.23.3")
     }
     "2019-containerd" {
         $global:imagesToPull = @(

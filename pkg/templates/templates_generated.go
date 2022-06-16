@@ -4,6 +4,7 @@
 // linux/cloud-init/artifacts/bind-mount.service
 // linux/cloud-init/artifacts/bind-mount.sh
 // linux/cloud-init/artifacts/cis.sh
+// linux/cloud-init/artifacts/cloud-controller-manager.yaml
 // linux/cloud-init/artifacts/containerd-monitor.service
 // linux/cloud-init/artifacts/containerd-monitor.timer
 // linux/cloud-init/artifacts/coredns.yaml
@@ -321,6 +322,87 @@ func linuxCloudInitArtifactsCisSh() (*asset, error) {
 	return a, nil
 }
 
+var _linuxCloudInitArtifactsCloudControllerManagerYaml = []byte(`apiVersion: v1
+kind: Pod
+metadata:
+  name: cloud-controller-manager
+  namespace: kube-system
+  labels:
+    tier: control-plane
+    component: cloud-controller-manager
+spec:
+  priorityClassName: system-node-critical
+  hostNetwork: true
+  containers:
+    - name: cloud-controller-manager
+      image: "mcr.microsoft.com/oss/kubernetes/azure-cloud-controller-manager:v1.23.3"
+      imagePullPolicy: IfNotPresent
+      env:
+      - name: AZURE_ENVIRONMENT_FILEPATH
+        value: /etc/kubernetes/azurestackcloud.json
+      - name: AZURE_GO_SDK_LOG_LEVEL
+        value: INFO
+      command: ["cloud-controller-manager"]
+      args:
+        - "--allocate-node-cidrs={{not IsAzureCNI}}"
+        - "--cloud-config=/etc/kubernetes/azure.json"
+        - "--cloud-provider=azure"
+        - "--cluster-cidr={{PodCIDR}}"
+        - "--cluster-name={{ClusterName}}"
+        - "--configure-cloud-routes={{not IsAzureCNI}}"
+        - "--controllers=*,-cloud-node"
+        - "--kubeconfig=/etc/kubernetes/admin.conf"
+        - "--leader-elect=true"
+        - "--route-reconciliation-period=10s"
+        - "--v=2"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 4
+          memory: 2Gi
+      volumeMounts:
+      - name: etc-kubernetes
+        mountPath: /etc/kubernetes
+      - name: etc-ssl
+        mountPath: /etc/ssl
+        readOnly: true
+      - name: var-lib-kubelet
+        mountPath: /var/lib/kubelet
+      - name: msi
+        mountPath: /var/lib/waagent/ManagedIdentity-Settings
+        readOnly: true
+  volumes:
+    - name: etc-kubernetes
+      hostPath:
+        path: /etc/kubernetes
+    - name: etc-ssl
+      hostPath:
+        path: /etc/ssl
+    - name: var-lib-kubelet
+      hostPath:
+        path: /var/lib/kubelet
+    - name: msi
+      hostPath:
+        path: /var/lib/waagent/ManagedIdentity-Settings
+`)
+
+func linuxCloudInitArtifactsCloudControllerManagerYamlBytes() ([]byte, error) {
+	return _linuxCloudInitArtifactsCloudControllerManagerYaml, nil
+}
+
+func linuxCloudInitArtifactsCloudControllerManagerYaml() (*asset, error) {
+	bytes, err := linuxCloudInitArtifactsCloudControllerManagerYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "linux/cloud-init/artifacts/cloud-controller-manager.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _linuxCloudInitArtifactsContainerdMonitorService = []byte(`[Unit]
 Description=a script that checks containerd health and restarts if needed
 After=containerd.service
@@ -399,7 +481,7 @@ spec:
       - args:
         - -conf
         - /etc/coredns/Corefile
-        image: mcr.microsoft.com/oss/kubernetes/coredns:1.8.0
+        image: mcr.microsoft.com/oss/kubernetes/coredns:1.8.7
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 5
@@ -715,6 +797,11 @@ customizeK8s() {
         FIRST_MASTER_NODE=false
     fi  
 
+    PATCHES=''
+    {{if not (IsKubernetesVersionGe "1.22.0")}}
+    PATCHES='--experimental-patches /etc/kubernetes/patches'
+    {{end}}
+
     if [ "${FIRST_MASTER_NODE}" = true ]; then
         local ADDON_CONFIG=$(mktemp)
         OLD="controlPlaneEndpoint: ${API_SERVER_NAME}"
@@ -723,7 +810,7 @@ customizeK8s() {
 
         retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase certs all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
         retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase kubeconfig all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
-        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase control-plane all --config ${CONFIG} --experimental-patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm init phase control-plane all --config ${CONFIG} ${PATCHES} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
         retrycmd_if_failure_no_stats 10 15 300 kubeadm init --config ${CONFIG} --skip-phases=certs,kubeconfig,control-plane,addon --ignore-preflight-errors=all -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
         # TODO Remove line below once /etc/kubernetes/addons/psp.yaml is baked
@@ -753,12 +840,17 @@ customizeK8s() {
         if [ $UPGRADE == 1 ] ; then
             CUR_MINOR=$(grep -oh "v1.[0-9]*.[0-9]*-azs$" /tmp/kubeadm-config.yaml | grep -oh "\.[0-9][0-9]\." | grep -o [0-9][0-9])
             NEW_MINOR=$(echo {{KubernetesVersion}} | grep -oh "\.[0-9][0-9]\." | grep -o [0-9][0-9])
+            {{if IsKubernetesVersionGe "1.23.0"}}
+            NEW_KUBELET_CONFIG="kubelet-config"
+            {{else}}
+            NEW_KUBELET_CONFIG="kubelet-config-1.${NEW_MINOR}"
+            {{end}}
 
             echo "upgrading control plane node to kubernetes v{{KubernetesVersion}}"
-            kubectl create role kubeadm:kubelet-config-1.${NEW_MINOR} -n kube-system --verb=get --resource=configmaps --resource-name=kubelet-config-1.${NEW_MINOR} --dry-run=client -o yaml \
+            kubectl create role kubeadm:${NEW_KUBELET_CONFIG} -n kube-system --verb=get --resource=configmaps --resource-name=${NEW_KUBELET_CONFIG} --dry-run=client -o yaml \
             | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
             
-            kubectl create rolebinding kubeadm:kubelet-config-1.${NEW_MINOR} -n kube-system --role=kubeadm:kubelet-config-1.${NEW_MINOR} --group=system:nodes --group=system:bootstrappers:kubeadm:default-node-token --dry-run=client -o yaml \
+            kubectl create rolebinding kubeadm:${NEW_KUBELET_CONFIG} -n kube-system --role=kubeadm:${NEW_KUBELET_CONFIG} --group=system:nodes --group=system:bootstrappers:kubeadm:default-node-token --dry-run=client -o yaml \
             | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
             kubectl create clusterrole kubeadm:get-nodes --verb=get --resource=nodes --dry-run=client -o yaml \
@@ -769,15 +861,28 @@ customizeK8s() {
 
             retrycmd_if_failure_no_stats 10 15 30 kubectl get cm kubelet-config-1.${CUR_MINOR} -n kube-system -o yaml --kubeconfig ${KUBECONFIG} > kubelet-config.yaml || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
-            sed "/resourceVersion/d" kubelet-config.yaml | sed "s/kubelet-config-1.${CUR_MINOR}/kubelet-config-1.${NEW_MINOR}/1" \
+            sed "/resourceVersion/d" kubelet-config.yaml | sed "s/kubelet-config-1.${CUR_MINOR}/${NEW_KUBELET_CONFIG}/1" \
             | retrycmd_if_failure_no_stats 10 15 30 kubectl apply --kubeconfig ${KUBECONFIG} -f - || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
             retrycmd_if_failure_no_stats 10 15 30 kubectl replace -n kube-system cm kubeadm-conf -f /tmp/kubeadm-upgrade.yaml --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_KUBEADM_INIT_JOIN
 
             retrycmd_if_failure_no_stats 10 15 30 kubectl apply -f /etc/kubernetes/addons/coredns.yaml --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_APPLY_ADDON
+
         fi
 
-        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare control-plane --config ${CONFIG} --experimental-patches /etc/kubernetes/patches -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
+        {{if IsKubernetesVersionGe "1.23.0"}}
+        extractEtcdctl || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MEMBERLIST
+        etcdMemberID=$(retrycmd_if_failure_no_stats 10 15 180 etcdctl --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --endpoints https://aks-master-{{GetClusterID}}-0:2379,https://aks-master-{{GetClusterID}}-1:2379,https://aks-master-{{GetClusterID}}-2:2379 member list | grep $(hostname) | sed 's/,.*//')
+        if [ -n "${etcdMemberID}" ]; then
+            echo "Removing etcdMember ${etcdMemberID} for $(hostname)"
+            retrycmd_if_failure_no_stats 10 15 180 etcdctl --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --endpoints https://aks-master-{{GetClusterID}}-0:2379,https://aks-master-{{GetClusterID}}-1:2379,https://aks-master-{{GetClusterID}}-2:2379 member remove ${etcdMemberID} || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MEMBERLIST
+        fi
+        backupUid=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 8)
+        echo "Back up etcd data directory to /var/lib/etcddisk/etcd-${backupUid}"
+        mv /var/lib/etcddisk/etcd /var/lib/etcddisk/etcd-${backupUid}
+        {{end}}
+
+        retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare control-plane --config ${CONFIG} ${PATCHES} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
         retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase kubelet-start --config ${CONFIG} -v 9 || exit $ERR_KUBELET_START_FAIL
         retrycmd_if_failure_no_stats 10 15 300 kubeadm join phase control-plane-join all --config ${CONFIG} -v 9 || exit $ERR_ASH_KUBEADM_INIT_JOIN
         retrycmd_if_failure_no_stats 10 15 180 kubectl uncordon ${NODE_NAME} --kubeconfig ${KUBECONFIG} || exit $ERR_ASH_KUBEADM_INIT_JOIN
@@ -1581,8 +1686,7 @@ ensureGPUDrivers() {
     systemctlEnableAndStart nvidia-modprobe || exit $ERR_GPU_DRIVERS_START_FAIL
 }
 {{end}}
-#EOF
-`)
+#EOF`)
 
 func linuxCloudInitArtifactsCse_configShBytes() ([]byte, error) {
 	return _linuxCloudInitArtifactsCse_configSh, nil
@@ -1858,6 +1962,21 @@ downloadDebPkgToFile() {
     retrycmd_if_failure 10 5 600 apt-get download ${PKG_NAME}=${PKG_VERSION}*
     # shellcheck disable=SC2164
     popd
+}
+getCPUArch() {
+    arch=$(uname -m)
+    if [[ ${arch,,} == "aarch64" || ${arch,,} == "arm64"  ]]; then
+        echo "arm64"
+    else
+        echo "amd64"
+    fi
+}
+isARM64() {
+    if [[ $(getCPUArch) == "arm64" ]]; then
+        echo 1
+    else
+        echo 0
+    fi
 }
 #HELPERSEOF
 `)
@@ -3360,7 +3479,7 @@ func linuxCloudInitArtifactsKubeProxyYaml() (*asset, error) {
 }
 
 var _linuxCloudInitArtifactsKubeadmConfigYaml = []byte(`---
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: {{KubeadmApiVersion}}
 kind: ClusterConfiguration
 etcd:
   local:
@@ -3383,7 +3502,9 @@ controlPlaneEndpoint: {{GetKubernetesEndpoint}}
 apiServer:
   extraArgs:
     cloud-config: /etc/kubernetes/azure.json
+    {{if not (IsKubernetesVersionGe "1.22.0")}}
     cloud-provider: azure
+    {{end}}
     audit-log-path: /var/log/kubeaudit/audit.log
     audit-policy-file: /etc/kubernetes/audit/audit-policy.yaml
     audit-log-maxage: "30"
@@ -3416,7 +3537,7 @@ controllerManager:
     allocate-node-cidrs: "{{IsKubenet}}"
     configure-cloud-routes: "{{IsKubenet}}"
     cloud-config: /etc/kubernetes/azure.json
-    cloud-provider: azure
+    cloud-provider: {{CloudProvider}}
     cluster-name: {{ResourceGroupName}}
     tls-min-version: VersionTLS12
     profiling: "false"
@@ -3432,13 +3553,19 @@ controllerManager:
 scheduler:
   extraArgs:
     tls-min-version: VersionTLS12
+{{if not (IsKubernetesVersionGe "1.22.0")}}
 dns:
   type: CoreDNS
+{{end}}
 imageRepository: mcr.microsoft.com/oss/kubernetes
 clusterName: {{ResourceGroupName}}
 ---
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: {{KubeadmApiVersion}}
 kind: InitConfiguration
+{{if IsKubernetesVersionGe "1.22.0"}}
+patches:
+  directory: /etc/kubernetes/patches
+{{end}}
 bootstrapTokens:
 - token: {{BootstrapToken}}
   ttl: 24h
@@ -3455,7 +3582,7 @@ nodeRegistration:
     value: "true"
   kubeletExtraArgs:
     cloud-config: /etc/kubernetes/azure.json
-    cloud-provider: azure
+    cloud-provider: {{CloudProvider}}
     node-labels: {{GetCPKubernetesLabels}}
     network-plugin: {{NetworkPluging}}
     non-masquerade-cidr: {{NonMasqueradeCIDR}}
@@ -3464,8 +3591,12 @@ localAPIEndpoint:
   advertiseAddress: ""
   bindPort: 443
 ---
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: {{KubeadmApiVersion}}
 kind: JoinConfiguration
+{{if IsKubernetesVersionGe "1.22.0"}}
+patches:
+  directory: /etc/kubernetes/patches
+{{end}}
 nodeRegistration:
   criSocket: /run/containerd/containerd.sock
   taints:
@@ -3474,7 +3605,7 @@ nodeRegistration:
     value: "true"
   kubeletExtraArgs:
     cloud-config: /etc/kubernetes/azure.json
-    cloud-provider: azure
+    cloud-provider: {{CloudProvider}}
     node-labels: {{GetCPKubernetesLabels}}
     network-plugin: {{NetworkPluging}}
     non-masquerade-cidr: {{NonMasqueradeCIDR}}
@@ -5009,41 +5140,63 @@ installStandaloneContainerd() {
     # azure-built runtimes have a "+azure" suffix in their version strings (i.e 1.4.1+azure). remove that here.
     CURRENT_VERSION=$(containerd -version | cut -d " " -f 3 | sed 's|v||' | cut -d "+" -f 1)
     # v1.4.1 is our lowest supported version of containerd
+
+    if [ -z "$CURRENT_VERSION" ]; then
+        CURRENT_VERSION="0.0.0"
+    fi
     
+    # we always default to the .1 patch versons
+    CONTAINERD_PATCH_VERSION="${2:-1}"
+
+    # runc needs to be installed first or else existing vhd version causes conflict with containerd.
+    ensureRunc ${RUNC_VERSION:-""} # RUNC_VERSION is an optional override supplied via NodeBootstrappingConfig api
+
     #if there is no containerd_version input from RP, use hardcoded version
     if [[ -z ${CONTAINERD_VERSION} ]]; then
-        CONTAINERD_VERSION="1.4.8"
-        echo "Containerd Version not specified, using default version: ${CONTAINERD_VERSION}"
+        CONTAINERD_VERSION="1.4.12"
+        CONTAINERD_PATCH_VERSION="2"
+        echo "Containerd Version not specified, using default version: ${CONTAINERD_VERSION}-${CONTAINERD_PATCH_VERSION}"
     else
-        echo "Using specified Containerd Version: ${CONTAINERD_VERSION}"
+        echo "Using specified Containerd Version: ${CONTAINERD_VERSION}-${CONTAINERD_PATCH_VERSION}"
     fi
 
-    if semverCompare ${CURRENT_VERSION:-"0.0.0"} ${CONTAINERD_VERSION}; then
-        echo "currently installed containerd version ${CURRENT_VERSION} is greater than (or equal to) target base version ${CONTAINERD_VERSION}. skipping installStandaloneContainerd."
+    CURRENT_MAJOR_MINOR="$(echo $CURRENT_VERSION | tr '.' '\n' | head -n 2 | paste -sd.)"
+    DESIRED_MAJOR_MINOR="$(echo $CONTAINERD_VERSION | tr '.' '\n' | head -n 2 | paste -sd.)"
+    HAS_GREATER_VERSION="$(semverCompare "$CURRENT_VERSION" "$CONTAINERD_VERSION")"
+
+    if [[ "$HAS_GREATER_VERSION" == "0" ]] && [[ "$CURRENT_MAJOR_MINOR" == "$DESIRED_MAJOR_MINOR" ]]; then
+        echo "currently installed containerd version ${CURRENT_VERSION} matches major.minor with higher patch ${CONTAINERD_VERSION}. skipping installStandaloneContainerd."
     else
         echo "installing containerd version ${CONTAINERD_VERSION}"
-        removeMoby
-        removeContainerd
+        # removeMoby
+        # removeContainerd
         # if containerd version has been overriden then there should exist a local .deb file for it on aks VHDs (best-effort)
         # if no files found then try fetching from packages.microsoft repo
-        if [ -f $VHD_LOGS_FILEPATH ]; then
-            CONTAINERD_DEB_TMP="moby-containerd_${CONTAINERD_VERSION/-/\~}+azure-1_amd64.deb"
-            CONTAINERD_DEB_FILE="$CONTAINERD_DOWNLOADS_DIR/${CONTAINERD_DEB_TMP}"
-            if [[ -f "${CONTAINERD_DEB_FILE}" ]]; then
-                installDebPackageFromFile ${CONTAINERD_DEB_FILE} || exit $ERR_CONTAINERD_INSTALL_TIMEOUT
-                return 0
-            fi
-        fi
-        updateAptWithMicrosoftPkg
-        apt_get_install 20 30 120 moby-containerd=${CONTAINERD_VERSION}* --allow-downgrades || exit $ERR_CONTAINERD_INSTALL_TIMEOUT
+        CPU_ARCH=$(getCPUArch)  #amd64 or arm64
+        CONTAINERD_DEB_TMP="moby-containerd_${CONTAINERD_VERSION/-/\~}+azure-${CONTAINERD_PATCH_VERSION}_${CPU_ARCH}.deb"
+        CONTAINERD_DEB_FILE="$CONTAINERD_DOWNLOADS_DIR/${CONTAINERD_DEB_TMP}"
+        if [[ -f "${CONTAINERD_DEB_FILE}" ]]; then
+            installDebPackageFromFile ${CONTAINERD_DEB_FILE} || exit $ERR_CONTAINERD_INSTALL_TIMEOUT
+            return 0
+        fi 
+        downloadContainerdFromVersion ${CONTAINERD_VERSION} ${CONTAINERD_PATCH_VERSION}
+        installDebPackageFromFile ${CONTAINERD_DEB_FILE} || exit $ERR_CONTAINERD_INSTALL_TIMEOUT
+        return 0
     fi
-    ensureRunc ${RUNC_VERSION:-""} # RUNC_VERSION is an optional override supplied via NodeBootstrappingConfig api
 }
 
-downloadContainerd() {
+downloadContainerdFromVersion() {
+    #containerd has arm64 binaries from 1.4.4 or later on moby.blob.core.windows.net
+    CPU_ARCH=$(getCPUArch)  #amd64 or arm64
     CONTAINERD_VERSION=$1
     # currently upstream maintains the package on a storage endpoint rather than an actual apt repo
-    CONTAINERD_DOWNLOAD_URL="https://mobyartifacts.azureedge.net/moby/moby-containerd/${CONTAINERD_VERSION}+azure/bionic/linux_amd64/moby-containerd_${CONTAINERD_VERSION/-/\~}+azure-1_amd64.deb"
+    CONTAINERD_PATCH_VERSION="${2:-1}"
+    CONTAINERD_DOWNLOAD_URL="https://moby.blob.core.windows.net/moby/moby-containerd/${CONTAINERD_VERSION}+azure/bionic/linux_${CPU_ARCH}/moby-containerd_${CONTAINERD_VERSION/-/\~}+azure-${CONTAINERD_PATCH_VERSION}_${CPU_ARCH}.deb"
+    downloadContainerdFromURL $CONTAINERD_DOWNLOAD_URL
+}
+
+downloadContainerdFromURL() {
+    CONTAINERD_DOWNLOAD_URL=$1
     mkdir -p $CONTAINERD_DOWNLOADS_DIR
     CONTAINERD_DEB_TMP=${CONTAINERD_DOWNLOAD_URL##*/}
     retrycmd_curl_file 120 5 60 "$CONTAINERD_DOWNLOADS_DIR/${CONTAINERD_DEB_TMP}" ${CONTAINERD_DOWNLOAD_URL} || exit $ERR_CONTAINERD_DOWNLOAD_TIMEOUT
@@ -5052,8 +5205,10 @@ downloadContainerd() {
 {{- end}}
 
 installMoby() {
+    ensureRunc ${RUNC_VERSION:-""} # RUNC_VERSION is an optional override supplied via NodeBootstrappingConfig api
     CURRENT_VERSION=$(dockerd --version | grep "Docker version" | cut -d "," -f 1 | cut -d " " -f 3 | cut -d "+" -f 1)
     local MOBY_VERSION="19.03.14"
+    local MOBY_CONTAINERD_VERSION="1.4.12"
     if semverCompare ${CURRENT_VERSION:-"0.0.0"} ${MOBY_VERSION}; then
         echo "currently installed moby-docker version ${CURRENT_VERSION} is greater than (or equal to) target base version ${MOBY_VERSION}. skipping installMoby."
     else
@@ -5063,17 +5218,16 @@ installMoby() {
         if [[ "${MOBY_CLI}" == "3.0.4" ]]; then
             MOBY_CLI="3.0.3"
         fi
-        apt_get_install 20 30 120 moby-engine=${MOBY_VERSION}* moby-cli=${MOBY_CLI}* --allow-downgrades || exit $ERR_MOBY_INSTALL_TIMEOUT
+        apt_get_install 20 30 120 moby-engine=${MOBY_VERSION}* moby-cli=${MOBY_CLI}* moby-containerd=${MOBY_CONTAINERD_VERSION}* --allow-downgrades || exit $ERR_MOBY_INSTALL_TIMEOUT
     fi
-    ensureRunc ${RUNC_VERSION:-""} # RUNC_VERSION is an optional override supplied via NodeBootstrappingConfig api
 }
 
 ensureRunc() {
-    TARGET_VERSION=$1
+    local TARGET_VERSION=$1
     if [[ -z ${TARGET_VERSION} ]]; then
-        TARGET_VERSION="1.0.0-rc95"
+        TARGET_VERSION="1.0.3"
     fi
-    CURRENT_VERSION=$(runc --version | head -n1 | sed 's/runc version //')
+    local CURRENT_VERSION=$(runc --version | head -n1 | sed 's/runc version //')
     if [ "${CURRENT_VERSION}" == "${TARGET_VERSION}" ]; then
         echo "target moby-runc version ${TARGET_VERSION} is already installed. skipping installRunc."
     fi
@@ -5993,6 +6147,15 @@ write_files:
     #EOF
 
 {{if IsControlPlane}}
+{{- if IsKubernetesVersionGe "1.22.0"}}
+- path: /etc/kubernetes/manifests/cloud-controller-manager.yaml
+  permissions: "0600"
+  encoding: gzip
+  owner: root
+  content: !!binary |
+    {{GetVariableProperty "cloudInitData" "cloudcontrollermanager"}}
+{{- end}}
+
 - path: /etc/kubernetes/kubeadm-config.yaml
   permissions: "0600"
   encoding: gzip
@@ -7088,6 +7251,54 @@ try
         Register-LogsCleanupScriptTask
         Register-NodeResetScriptTask
         Update-DefenderPreferences
+
+        {{if IsAzureStackCloud}}
+            {{if IsKubernetesVersionGe "1.22.0"}}
+            # Retrieve SSL cert of ARM Endpoint and find unique Azure Stack root cert
+            $azsConfigFile = [io.path]::Combine($global:KubeDir, "azurestackcloud.json")
+            if (-not (Test-Path -Path $azsConfigFile)) {
+                throw "$azsConfigFile does not exist"
+            }
+            $azsJson = Get-Content -Raw -Path $azsConfigFile | ConvertFrom-Json
+            if ([string]::IsNullOrEmpty($azsJson.resourceManagerEndpoint)) {
+                throw "resourceManagerEndpoint is empty, cannot get Azure Stack ARM uri"
+            }
+            $azsARMUri = [System.Uri]$azsJson.resourceManagerEndpoint
+            $webRequest = [Net.WebRequest]::Create($azsARMUri.AbsoluteUri)
+            try { $webRequest.GetResponse() } catch {}
+            if (($null -eq $webRequest.ServicePoint) -Or ($null -eq $webRequest.ServicePoint.Certificate)) {
+                throw "SSL Certificate of ARM endpoint is null"
+            }
+            $sslCert = $webRequest.ServicePoint.Certificate
+            $sslCertChain = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Chain
+            $sslCertChain.build($sslCert)
+            $sslRootCert = @($sslCertChain.ChainElements.Certificate)[-1]
+            $azsRootCert = Get-ChildItem -Path Cert:\LocalMachine\Root | Where-Object {$_.Thumbprint -eq $sslRootCert.Thumbprint}
+            if ($null -eq $azsRootCert) {
+                throw "azsRootCert is null, cannot find Azure Stack root cert"
+            } elseif ($azsRootCert.Count -ne 1) {
+                throw "azsRootCert is not unique, cannot find Azure Stack root cert"
+            }
+
+            # Export the Azure Stack root cert for use in cloud node manager container setup.
+            $azsRootCertFilePath =  [io.path]::Combine($global:KubeDir, "azsroot.cer")
+            Export-Certificate -Cert $azsRootCert -FilePath $azsRootCertFilePath -Type CERT
+
+            # Copy certoc tool for use in cloud node manager container setup. [Environment]::SystemDirectory
+            $certocSourcePath = [io.path]::Combine([Environment]::SystemDirectory, "certoc.exe")
+            if (-not (Test-Path -Path $certocSourcePath)) {
+                throw "$certocSourcePath does not exist, cannot export Azure Stack root cert"
+            }
+            Copy-Item -Path $certocSourcePath -Destination $global:KubeDir
+
+            # Create add cert script
+            $addRootCertFile = [io.path]::Combine($global:KubeDir, "addazsroot.bat")
+            if ($null -eq $azsRootCert) {
+                throw "$azsRootCertFilePath is null, cannot create add cert script"
+            }
+            [io.file]::WriteAllText($addRootCertFile, "${global:KubeDir}\certoc.exe -addstore root ${azsRootCertFilePath}")
+            {{end}}
+        {{end}}
 
         if ($windowsSecureTlsEnabled) {
             Write-Host "Enable secure TLS protocols"
@@ -9045,6 +9256,7 @@ var _bindata = map[string]func() (*asset, error){
 	"linux/cloud-init/artifacts/bind-mount.service":                        linuxCloudInitArtifactsBindMountService,
 	"linux/cloud-init/artifacts/bind-mount.sh":                             linuxCloudInitArtifactsBindMountSh,
 	"linux/cloud-init/artifacts/cis.sh":                                    linuxCloudInitArtifactsCisSh,
+	"linux/cloud-init/artifacts/cloud-controller-manager.yaml":             linuxCloudInitArtifactsCloudControllerManagerYaml,
 	"linux/cloud-init/artifacts/containerd-monitor.service":                linuxCloudInitArtifactsContainerdMonitorService,
 	"linux/cloud-init/artifacts/containerd-monitor.timer":                  linuxCloudInitArtifactsContainerdMonitorTimer,
 	"linux/cloud-init/artifacts/coredns.yaml":                              linuxCloudInitArtifactsCorednsYaml,
@@ -9164,6 +9376,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 				"bind-mount.service":                        &bintree{linuxCloudInitArtifactsBindMountService, map[string]*bintree{}},
 				"bind-mount.sh":                             &bintree{linuxCloudInitArtifactsBindMountSh, map[string]*bintree{}},
 				"cis.sh":                                    &bintree{linuxCloudInitArtifactsCisSh, map[string]*bintree{}},
+				"cloud-controller-manager.yaml":             &bintree{linuxCloudInitArtifactsCloudControllerManagerYaml, map[string]*bintree{}},
 				"containerd-monitor.service":                &bintree{linuxCloudInitArtifactsContainerdMonitorService, map[string]*bintree{}},
 				"containerd-monitor.timer":                  &bintree{linuxCloudInitArtifactsContainerdMonitorTimer, map[string]*bintree{}},
 				"coredns.yaml":                              &bintree{linuxCloudInitArtifactsCorednsYaml, map[string]*bintree{}},

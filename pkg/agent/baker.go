@@ -326,6 +326,15 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 			}
 			return "azure"
 		},
+		"CloudControllerManagerVersion": func() string {
+			if IsKubernetesVersionGe(cs.Properties.OrchestratorProfile.OrchestratorVersion, "1.23.0") {
+				return "1.23.11"
+			} else if IsKubernetesVersionGe(cs.Properties.OrchestratorProfile.OrchestratorVersion, "1.22.0") {
+				return "1.1.14"
+			} else {
+				return ""
+			}
+		},
 		// TODO ASH DELETE
 		"ClusterName": func() string {
 			return cs.Properties.HostedMasterProfile.DNSPrefix

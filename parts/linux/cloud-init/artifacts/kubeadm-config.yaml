@@ -73,10 +73,13 @@ controllerManager:
 scheduler:
   extraArgs:
     tls-min-version: VersionTLS12
-{{if not (IsKubernetesVersionGe "1.22.0")}}
 dns:
+{{if not (IsKubernetesVersionGe "1.22.0")}}
   type: CoreDNS
 {{end}}
+  ImageMeta: 
+    imageRepository: mcr.microsoft.com/oss/kubernetes/coredns
+    imageTag: v1.8.7
 imageRepository: mcr.microsoft.com/oss/kubernetes
 clusterName: {{ResourceGroupName}}
 ---

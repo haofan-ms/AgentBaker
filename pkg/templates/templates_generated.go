@@ -335,7 +335,7 @@ spec:
   hostNetwork: true
   containers:
     - name: cloud-controller-manager
-      image: "mcr.microsoft.com/oss/kubernetes/azure-cloud-controller-manager:v1.23.3"
+      image: "mcr.microsoft.com/oss/kubernetes/azure-cloud-controller-manager:{{CloudControllerManagerVersion}}"
       imagePullPolicy: IfNotPresent
       env:
       - name: AZURE_ENVIRONMENT_FILEPATH
@@ -872,14 +872,14 @@ customizeK8s() {
 
         {{if IsKubernetesVersionGe "1.23.0"}}
         extractEtcdctl || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MEMBERLIST
-        etcdMemberID=$(retrycmd_if_failure_no_stats 10 15 180 etcdctl --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --endpoints https://aks-master-{{GetClusterID}}-0:2379,https://aks-master-{{GetClusterID}}-1:2379,https://aks-master-{{GetClusterID}}-2:2379 member list | grep $(hostname) | sed 's/,.*//')
+        etcdMemberID=$(retrycmd_if_failure_no_stats 10 15 180 etcdctl --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --endpoints https://aks-master-{{GetClusterID}}-0:2379,https://aks-master-{{GetClusterID}}-1:2379,https://aks-master-{{GetClusterID}}-2:2379 member list | grep $(hostname) | sed 's/,.*//' || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MEMBERLIST)
         if [ -n "${etcdMemberID}" ]; then
             echo "Removing etcdMember ${etcdMemberID} for $(hostname)"
             retrycmd_if_failure_no_stats 10 15 180 etcdctl --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/peer.crt --key /etc/kubernetes/pki/etcd/peer.key --endpoints https://aks-master-{{GetClusterID}}-0:2379,https://aks-master-{{GetClusterID}}-1:2379,https://aks-master-{{GetClusterID}}-2:2379 member remove ${etcdMemberID} || exit $ERR_ASH_KUBEADM_REFRESH_ETCD_MEMBERLIST
         fi
         backupUid=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 8)
-        echo "Back up etcd data directory to /var/lib/etcddisk/etcd-${backupUid}"
-        mv /var/lib/etcddisk/etcd /var/lib/etcddisk/etcd-${backupUid}
+        echo "Back up etcd data directory to /var/lib/etcddisk/etcd-bkp-${backupUid}"
+        mv /var/lib/etcddisk/etcd /var/lib/etcddisk/etcd-bkp-${backupUid}
         {{end}}
 
         retrycmd_if_failure_no_stats 10 15 180 kubeadm join phase control-plane-prepare control-plane --config ${CONFIG} ${PATCHES} -v 9 || exit $ERR_ASH_KUBEADM_GEN_FILES
@@ -3553,10 +3553,13 @@ controllerManager:
 scheduler:
   extraArgs:
     tls-min-version: VersionTLS12
-{{if not (IsKubernetesVersionGe "1.22.0")}}
 dns:
+{{if not (IsKubernetesVersionGe "1.22.0")}}
   type: CoreDNS
 {{end}}
+  ImageMeta: 
+    imageRepository: mcr.microsoft.com/oss/kubernetes/coredns
+    imageTag: v1.8.7
 imageRepository: mcr.microsoft.com/oss/kubernetes
 clusterName: {{ResourceGroupName}}
 ---

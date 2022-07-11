@@ -328,9 +328,9 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 		},
 		"CloudControllerManagerVersion": func() string {
 			if IsKubernetesVersionGe(cs.Properties.OrchestratorProfile.OrchestratorVersion, "1.23.0") {
-				return "1.23.11"
+				return "v1.23.11"
 			} else if IsKubernetesVersionGe(cs.Properties.OrchestratorProfile.OrchestratorVersion, "1.22.0") {
-				return "1.1.14"
+				return "v1.1.16"
 			} else {
 				return ""
 			}

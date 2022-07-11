@@ -46,6 +46,7 @@ switch ($windowsSKU) {
             "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.10.0",
             "mcr.microsoft.com/oss/kubernetes-csi/secrets-store/driver:v0.0.21",
             "mcr.microsoft.com/oss/azure/secrets-store/provider-azure:0.0.14",
+            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.1.6",
             "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.23.3")
     }
     "2019-containerd" {
@@ -64,6 +65,7 @@ switch ($windowsSKU) {
             "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.10.0",
             "mcr.microsoft.com/oss/kubernetes-csi/secrets-store/driver:v0.0.21",
             "mcr.microsoft.com/oss/azure/secrets-store/provider-azure:0.0.14",
+            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.1.6",
             "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.23.3",
             "mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021-2")
     }

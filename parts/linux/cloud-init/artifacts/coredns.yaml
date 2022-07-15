@@ -25,7 +25,7 @@ spec:
       - args:
         - -conf
         - /etc/coredns/Corefile
-        image: mcr.microsoft.com/oss/kubernetes/coredns:1.8.7
+        image: mcr.microsoft.com/oss/kubernetes/coredns:{{CorednsVersion}}
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 5

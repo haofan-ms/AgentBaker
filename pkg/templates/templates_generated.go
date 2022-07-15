@@ -481,7 +481,7 @@ spec:
       - args:
         - -conf
         - /etc/coredns/Corefile
-        image: mcr.microsoft.com/oss/kubernetes/coredns:1.8.7
+        image: mcr.microsoft.com/oss/kubernetes/coredns:{{CorednsVersion}}
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 5
@@ -3557,9 +3557,8 @@ dns:
 {{if not (IsKubernetesVersionGe "1.22.0")}}
   type: CoreDNS
 {{end}}
-  ImageMeta: 
-    imageRepository: mcr.microsoft.com/oss/kubernetes/coredns
-    imageTag: v1.8.7
+  imageRepository: mcr.microsoft.com/oss/kubernetes/coredns
+imageTag: {{CorednsVersion}}
 imageRepository: mcr.microsoft.com/oss/kubernetes
 clusterName: {{ResourceGroupName}}
 ---

@@ -326,6 +326,7 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 			}
 			return "azure"
 		},
+		// TODO ASH DELETE
 		"CloudControllerManagerVersion": func() string {
 			if IsKubernetesVersionGe(cs.Properties.OrchestratorProfile.OrchestratorVersion, "1.23.0") {
 				return "v1.23.11"
@@ -333,6 +334,16 @@ func getContainerServiceFuncMap(config *datamodel.NodeBootstrappingConfiguration
 				return "v1.1.16"
 			} else {
 				return ""
+			}
+		},
+		// TODO ASH DELETE
+		"CorednsVersion": func() string {
+			if IsKubernetesVersionGe(cs.Properties.OrchestratorProfile.OrchestratorVersion, "1.23.0") {
+				return "1.8.6"
+			} else if IsKubernetesVersionGe(cs.Properties.OrchestratorProfile.OrchestratorVersion, "1.22.0") {
+				return "1.8.4"
+			} else {
+				return "1.8.0"
 			}
 		},
 		// TODO ASH DELETE

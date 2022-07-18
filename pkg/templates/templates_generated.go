@@ -3557,8 +3557,7 @@ dns:
 {{if not (IsKubernetesVersionGe "1.22.0")}}
   type: CoreDNS
 {{end}}
-  imageRepository: mcr.microsoft.com/oss/kubernetes/coredns
-imageTag: {{CorednsVersion}}
+  imageTag: {{CorednsVersion}}
 imageRepository: mcr.microsoft.com/oss/kubernetes
 clusterName: {{ResourceGroupName}}
 ---

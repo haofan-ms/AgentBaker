@@ -1,5 +1,5 @@
 ---
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: {{KubeadmApiVersion}}
 kind: ClusterConfiguration
 etcd:
   local:
@@ -22,7 +22,9 @@ controlPlaneEndpoint: {{GetKubernetesEndpoint}}
 apiServer:
   extraArgs:
     cloud-config: /etc/kubernetes/azure.json
+    {{if not (IsKubernetesVersionGe "1.22.0")}}
     cloud-provider: azure
+    {{end}}
     audit-log-path: /var/log/kubeaudit/audit.log
     audit-policy-file: /etc/kubernetes/audit/audit-policy.yaml
     audit-log-maxage: "30"
@@ -55,7 +57,7 @@ controllerManager:
     allocate-node-cidrs: "{{IsKubenet}}"
     configure-cloud-routes: "{{IsKubenet}}"
     cloud-config: /etc/kubernetes/azure.json
-    cloud-provider: azure
+    cloud-provider: {{CloudProvider}}
     cluster-name: {{ResourceGroupName}}
     tls-min-version: VersionTLS12
     profiling: "false"
@@ -72,12 +74,19 @@ scheduler:
   extraArgs:
     tls-min-version: VersionTLS12
 dns:
+{{if not (IsKubernetesVersionGe "1.22.0")}}
   type: CoreDNS
+{{end}}
+  imageTag: {{CorednsVersion}}
 imageRepository: mcr.microsoft.com/oss/kubernetes
 clusterName: {{ResourceGroupName}}
 ---
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: {{KubeadmApiVersion}}
 kind: InitConfiguration
+{{if IsKubernetesVersionGe "1.22.0"}}
+patches:
+  directory: /etc/kubernetes/patches
+{{end}}
 bootstrapTokens:
 - token: {{BootstrapToken}}
   ttl: 24h
@@ -94,7 +103,7 @@ nodeRegistration:
     value: "true"
   kubeletExtraArgs:
     cloud-config: /etc/kubernetes/azure.json
-    cloud-provider: azure
+    cloud-provider: {{CloudProvider}}
     node-labels: {{GetCPKubernetesLabels}}
     network-plugin: {{NetworkPluging}}
     non-masquerade-cidr: {{NonMasqueradeCIDR}}
@@ -103,8 +112,12 @@ localAPIEndpoint:
   advertiseAddress: ""
   bindPort: 443
 ---
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: {{KubeadmApiVersion}}
 kind: JoinConfiguration
+{{if IsKubernetesVersionGe "1.22.0"}}
+patches:
+  directory: /etc/kubernetes/patches
+{{end}}
 nodeRegistration:
   criSocket: /run/containerd/containerd.sock
   taints:
@@ -113,7 +126,7 @@ nodeRegistration:
     value: "true"
   kubeletExtraArgs:
     cloud-config: /etc/kubernetes/azure.json
-    cloud-provider: azure
+    cloud-provider: {{CloudProvider}}
     node-labels: {{GetCPKubernetesLabels}}
     network-plugin: {{NetworkPluging}}
     non-masquerade-cidr: {{NonMasqueradeCIDR}}

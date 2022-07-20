@@ -1,6 +1,9 @@
 # MUST define global variable with "global"
 # This script is used to generate shared configuration for configure-windows-vhd.ps1 and windows-vhd-content-test.ps1.
 # MUST NOT add any shared functions in this script.
+
+# Removed 'mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021' and 'mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021-2' images for windowsSKU '2019' as OS disk out of space during VHD build
+
 $windowsConfig = @'
 $global:containerRuntime = $env:ContainerRuntime
 $validContainerRuntimes = @("containerd", "docker")
@@ -34,28 +37,25 @@ switch ($windowsSKU) {
             "mcr.microsoft.com/windows/servercore:ltsc2019",
             "mcr.microsoft.com/windows/nanoserver:1809",
             "mcr.microsoft.com/oss/kubernetes/pause:3.4.1",
+            "mcr.microsoft.com/oss/kubernetes/pause:3.5",
+            "mcr.microsoft.com/oss/kubernetes/pause:3.6",
             "mcr.microsoft.com/oss/kubernetes-csi/livenessprobe:v2.3.0",
             "mcr.microsoft.com/oss/kubernetes-csi/csi-node-driver-registrar:v2.2.0",
-            "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.4.0",
-            "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.5.0",
-            "mcr.microsoft.com/oss/kubernetes-csi/azurefile-csi:v1.4.0",
-            "mcr.microsoft.com/oss/kubernetes-csi/azurefile-csi:v1.5.0",
             "mcr.microsoft.com/oss/kubernetes-csi/livenessprobe:v2.5.0",
             "mcr.microsoft.com/oss/kubernetes-csi/csi-node-driver-registrar:v2.4.0",
             "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.10.0",
             "mcr.microsoft.com/oss/kubernetes-csi/secrets-store/driver:v0.0.21",
             "mcr.microsoft.com/oss/azure/secrets-store/provider-azure:0.0.14",
-            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v0.6.0", # for k8s 1.19.x
-            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v0.7.5", # for k8s 1.20.x
-            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.0.2", # for k8s 1.21.x
-            "mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021",
-            "mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021-2")
+            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.1.6",
+            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.23.3")
     }
     "2019-containerd" {
         $global:imagesToPull = @(
             "mcr.microsoft.com/windows/servercore:ltsc2019",
             "mcr.microsoft.com/windows/nanoserver:1809",
             "mcr.microsoft.com/oss/kubernetes/pause:3.4.1",
+            "mcr.microsoft.com/oss/kubernetes/pause:3.5",
+            "mcr.microsoft.com/oss/kubernetes/pause:3.6",
             "mcr.microsoft.com/oss/kubernetes-csi/livenessprobe:v2.3.0",
             "mcr.microsoft.com/oss/kubernetes-csi/csi-node-driver-registrar:v2.2.0",
             "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.4.0",
@@ -65,8 +65,8 @@ switch ($windowsSKU) {
             "mcr.microsoft.com/oss/kubernetes-csi/azuredisk-csi:v1.10.0",
             "mcr.microsoft.com/oss/kubernetes-csi/secrets-store/driver:v0.0.21",
             "mcr.microsoft.com/oss/azure/secrets-store/provider-azure:0.0.14",
-            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v0.7.5", # for k8s 1.20.x
-            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.0.2", # for k8s 1.21.x
+            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.1.6",
+            "mcr.microsoft.com/oss/kubernetes/azure-cloud-node-manager:v1.23.3",
             "mcr.microsoft.com/azuremonitor/containerinsights/ciprod:win-ciprod06112021-2")
     }
     default {
@@ -121,7 +121,9 @@ $global:map = @{
     #    3. Keep v1.18.17-hotfix.20210322 when adding v1.18.17-hotfix.20210505
     "c:\akse-cache\win-k8s\"      = @(
         "https://kubernetesartifacts.azureedge.net/kubernetes/v1.20.13-azs/windowszip/v1.20.13-azs-1int.zip",
-        "https://kubernetesartifacts.azureedge.net/kubernetes/v1.21.7-azs/windowszip/v1.21.7-azs-1int.zip"
+        "https://kubernetesartifacts.azureedge.net/kubernetes/v1.21.7-azs/windowszip/v1.21.7-azs-1int.zip",
+        "https://kubernetesartifacts.azureedge.net/kubernetes/v1.22.6/windowszip/v1.22.6-1int.zip",
+        "https://kubernetesartifacts.azureedge.net/kubernetes/v1.23.3/windowszip/v1.23.3-1int.zip"
     );
     "c:\akse-cache\win-vnet-cni\" = @(
         "https://acs-mirror.azureedge.net/azure-cni/v1.2.2/binaries/azure-vnet-cni-singletenancy-windows-amd64-v1.2.2.zip"

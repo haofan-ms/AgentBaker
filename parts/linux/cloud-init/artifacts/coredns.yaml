@@ -25,7 +25,7 @@ spec:
       - args:
         - -conf
         - /etc/coredns/Corefile
-        image: mcr.microsoft.com/oss/kubernetes/coredns:1.7.0
+        image: mcr.microsoft.com/oss/kubernetes/coredns:{{CorednsVersion}}
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 5
@@ -179,6 +179,13 @@ rules:
   - nodes
   verbs:
   - get
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

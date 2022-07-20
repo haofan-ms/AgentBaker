@@ -500,6 +500,54 @@ try
         Register-NodeResetScriptTask
         Update-DefenderPreferences
 
+        {{if IsAzureStackCloud}}
+            {{if IsKubernetesVersionGe "1.22.0"}}
+            # Retrieve SSL cert of ARM Endpoint and find unique Azure Stack root cert
+            $azsConfigFile = [io.path]::Combine($global:KubeDir, "azurestackcloud.json")
+            if (-not (Test-Path -Path $azsConfigFile)) {
+                throw "$azsConfigFile does not exist"
+            }
+            $azsJson = Get-Content -Raw -Path $azsConfigFile | ConvertFrom-Json
+            if ([string]::IsNullOrEmpty($azsJson.resourceManagerEndpoint)) {
+                throw "resourceManagerEndpoint is empty, cannot get Azure Stack ARM uri"
+            }
+            $azsARMUri = [System.Uri]$azsJson.resourceManagerEndpoint
+            $webRequest = [Net.WebRequest]::Create($azsARMUri.AbsoluteUri)
+            try { $webRequest.GetResponse() } catch {}
+            if (($null -eq $webRequest.ServicePoint) -Or ($null -eq $webRequest.ServicePoint.Certificate)) {
+                throw "SSL Certificate of ARM endpoint is null"
+            }
+            $sslCert = $webRequest.ServicePoint.Certificate
+            $sslCertChain = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Chain
+            $sslCertChain.build($sslCert)
+            $sslRootCert = @($sslCertChain.ChainElements.Certificate)[-1]
+            $azsRootCert = Get-ChildItem -Path Cert:\LocalMachine\Root | Where-Object {$_.Thumbprint -eq $sslRootCert.Thumbprint}
+            if ($null -eq $azsRootCert) {
+                throw "azsRootCert is null, cannot find Azure Stack root cert"
+            } elseif ($azsRootCert.Count -ne 1) {
+                throw "azsRootCert is not unique, cannot find Azure Stack root cert"
+            }
+
+            # Export the Azure Stack root cert for use in cloud node manager container setup.
+            $azsRootCertFilePath =  [io.path]::Combine($global:KubeDir, "azsroot.cer")
+            Export-Certificate -Cert $azsRootCert -FilePath $azsRootCertFilePath -Type CERT
+
+            # Copy certoc tool for use in cloud node manager container setup. [Environment]::SystemDirectory
+            $certocSourcePath = [io.path]::Combine([Environment]::SystemDirectory, "certoc.exe")
+            if (-not (Test-Path -Path $certocSourcePath)) {
+                throw "$certocSourcePath does not exist, cannot export Azure Stack root cert"
+            }
+            Copy-Item -Path $certocSourcePath -Destination $global:KubeDir
+
+            # Create add cert script
+            $addRootCertFile = [io.path]::Combine($global:KubeDir, "addazsroot.bat")
+            if ($null -eq $azsRootCert) {
+                throw "$azsRootCertFilePath is null, cannot create add cert script"
+            }
+            [io.file]::WriteAllText($addRootCertFile, "${global:KubeDir}\certoc.exe -addstore root ${azsRootCertFilePath}")
+            {{end}}
+        {{end}}
+
         if ($windowsSecureTlsEnabled) {
             Write-Host "Enable secure TLS protocols"
             try {
